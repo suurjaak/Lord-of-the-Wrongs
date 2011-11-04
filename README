@@ -40,6 +40,10 @@ LOTW has been written in Delphi 7. It uses a number of third party libraries:
 CHANGELOG
 ---------
 
+2011-11-04
+Version 1.0.1, build 44.
+Final tweaks and code cleanup.
+
 2011-11-03
 Version 1.0.0, build 43.
 Massive changes, including:

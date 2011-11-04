@@ -1,24 +1,29 @@
 (**
- * Global constants, utility functions, and some global variables.
+ * Application-wide global constants, utility functions, and global variables.
  *
  * @author    Erki Suurjaak
  * @created   20.12.2003
- * @modified  02.11.2011
+ * @modified  04.11.2011
  *)
 unit Globals;
 
 interface
 
-uses DataClasses, classes, SysUtils, Imaging, ElHashList, Graphics, Windows;
+uses DataClasses, Imaging, ElHashList, Persistence, classes, SysUtils, Graphics,
+     SyncObjs, Windows;
 
 const
+  // %s will be replaced by application version.
+  COPYRIGHT_TEXT_TEMPLATE =
+    'LOTW %s, written by Erki Suurjaak, initially in 2003. ' +
+    'Most card media and game logic courtesy of Decipher, Inc.';
   // Whether some debug messages are printed or not
   DEBUG = False;
 
   DEFAULT_DB_FILENAME = 'lotw.db';
 
-  UNIQUE_SYMBOL = '·';
-  MIDDLE_DOT = '·';
+  UNIQUE_SYMBOL = #183;
+  MIDDLE_DOT = #183;
 
   NEW_LINE = #13#10;
 
@@ -85,41 +90,6 @@ const
   SITE_CONTENT_PICTURE_MAX_HEIGHT = 225;
 
 
-type
-  TStringArray = array of String;
-  RecordSet = array of TStringArray;
-
-  // Basically, just a container for a string, as the unprintable and
-  // anatomically totally impossible obscenity Delphi has nothing like
-  // it and PChars won't do the trick
-  TString = class
-    Value: String;
-  end;
-
-  TSortInfo = class
-    SortColumn: String;
-    IsSortReversed: Boolean;
-    constructor Create();
-  end;
-
-
-  TRGBArray = array[Word] of TRGBTriple;
-  pRGBArray = ^TRGBArray;
-  
-var
-  CurrentCard: TCard;
-  CurrentDeck: TDeck;
-  CurrentRace: TRace;
-  CurrentSite: TSite;
-  Times: TStringArray;
-  Decks: TList;
-  Cards: TList;
-  Races: TList;
-  Sites: TList;
-  Settings: TElHashList;
-  Imager: TImaging;
-
-
 // Returns the tag number for the specified type, required
 // for automatic interface changes in the card editor
 function GetCardTypeTag(CardType: String): Integer;
@@ -153,21 +123,65 @@ function CardListSortCompare(Item1, Item2: Pointer): Integer;
 function SiteListSortCompare(Item1, Item2: Pointer): Integer;
 // Returns a system setting, from the Settings map
 function GetSetting(Name: String): String;
+// Returns a system setting, from the Settings map
+function GetSettingInt(Name: String): Integer;
 // Splits the string into words
 function SplitTextIntoWords(const S: string): TStringList;
 // Returns a formatted size (e.g. '1.3 MB', '1.2 KB' etc)
 function FormatByteSize(Size: Integer): String;
+// Returns the application version, e.g. '1.0.1.44'
+function GetApplicationVersion(): String;
+
+
+var
+  Database: TPersistence;
+  // Maps the positions in ComboCardList to TCard objects
+  ComboCardListMap: TElHashList;
+  ComboListDecksMap: TElHashList;
+  ComboSiteListMap: TElHashList;
+  IsCardChanged: Boolean = False;
+  IsDeckChanged: Boolean = False;
+  IsSiteChanged: Boolean = False;
+  ListCardsSortInfo: TSortInfo;
+  ListDecksSortInfo: TSortInfo;
+  ListDeckAllCardsSortInfo: TSortInfo;
+  ListDeckCardsSortInfo: TSortInfo;
+  ListDeckAllSitesSortInfo: TSortInfo;
+  ListDeckSitesSortInfo: TSortInfo;
+  ListCardsFilterRace: String = '';
+  ListCardsFilterType: String = '';
+  ListCardsFilterTime: String = '';
+  DBFilename: String;
+  ListCardsFilterDeck: TDeck = nil;
+  ApplyFilter: Boolean = False;
+  IgnoreCardChanges: Boolean = False;
+  IgnoreSiteChanges: Boolean = False;
+  IgnoreDeckChanges: Boolean = False;
+  PendingThumbnails: TList;
+  PendingThumbnailCards: TList;
+  PreviewedCard: TCard = nil;
+  TransparentPixel: TPicture;
+  CurrentCard: TCard;
+  CurrentDeck: TDeck;
+  CurrentRace: TRace;
+  CurrentSite: TSite;
+  Times: TStringArray;
+  Decks: TList;
+  Cards: TList;
+  Races: TList;
+  Sites: TList;
+  Settings: TElHashList;
+  Imager: TImaging;
+  CardLoadSection: TCriticalSection;
+
+
+
 implementation
 
-uses db;
+uses db, Forms;
 
-constructor TSortInfo.Create();
-begin
-  SortColumn := CARD_LIST_COLUMN_TITLE;
-  IsSortReversed := False;
-end;
-
-
+// Returns the tag number for the specified type, required
+// for automatic interface changes in the card editor
 function GetCardTypeTag(CardType: String): Integer;
 var I: Integer;
 begin
@@ -178,11 +192,11 @@ begin
 end;
 
 
+// Removes the card from the global cards array and elsewhere
 procedure RemoveCardFromVariables(var Card: TCard);
 var I, J: Integer;
 begin
-  while (Cards.Remove(Card) <> -1) do
-    Nothing;
+  while (Cards.Remove(Card) <> -1) do Nothing();
   Cards.Pack;
   for I := 0 to Decks.Count - 1 do begin
     for J := 0 to TDeck(Decks.Items[I]).Cards.Count - 1 do begin
@@ -194,6 +208,7 @@ begin
 end;
 
 
+// Adds the card to the global cards array and elsewhere (if missing)
 procedure AddCardToVariables(var Card: TCard);
 begin
   if (Cards.IndexOf(Card) = -1) then
@@ -201,14 +216,15 @@ begin
 end;
 
 
+// Removes the deck from the global variables
 procedure RemoveDeckFromVariables(var Deck: TDeck);
 begin
-  while (Decks.Remove(Deck) <> -1) do
-    Nothing;
+  while (Decks.Remove(Deck) <> -1) do Nothing();
   Decks.Pack;
 end;
 
 
+// Returns the card with the specified ID
 function GetCardByID(ID: Integer): TCard;
 var I: Integer;
 begin
@@ -221,6 +237,7 @@ begin
 end;
 
 
+// Returns the site with the specified ID
 function GetSiteByID(ID: Integer): TSite;
 var I: Integer;
 begin
@@ -235,6 +252,7 @@ end;
 
 
 
+// Returns the race with the specified ID
 function GetRaceByID(ID: Integer): TRace;
 var I: Integer;
 begin
@@ -261,12 +279,12 @@ end;
 
 procedure RemoveCardFromDeck(var Deck: TDeck; var Card: TDeckCard);
 begin
-  while (Deck.Cards.Remove(Card) <> -1) do
-    Nothing;
+  while (Deck.Cards.Remove(Card) <> -1) do Nothing();
   Deck.Cards.Pack();
 end;
 
 
+// Does nothing
 procedure Nothing();
 begin
 end;
@@ -287,12 +305,14 @@ begin
 end;
 
 
+// A version of ExtractFileName that works with URLs also
 function ExtractFileNameBetter(FilePath: String): String;
 begin
   Result := Copy(FilePath, LastDelimiter('/\', FilePath) + 1, Length(FilePath))
 end;
 
 
+// The comparison function used for sorting Cards
 function CardListSortCompare(Item1, Item2: Pointer): Integer;
 var Card1, Card2: TCard;
     Field1, Field2: String;
@@ -309,6 +329,7 @@ begin
 end;
 
 
+// The comparison function used for sorting Sites
 function SiteListSortCompare(Item1, Item2: Pointer): Integer;
 var Site1, Site2: TSite;
     Field1, Field2: String;
@@ -320,6 +341,7 @@ begin
   Result := StrIComp(PChar(Field1), PChar(Field2));
 end;
 
+// Returns a system setting, from the Settings map
 function GetSetting(Name: String): String;
 var Temp: TString;
 begin
@@ -329,11 +351,21 @@ begin
     Result := Temp.Value;
 end;
 
+// Returns a system setting, from the Settings map
+function GetSettingInt(Name: String): Integer;
+var Temp: TString;
+begin
+  Result := 0;
+  Temp := Settings.Item[Name];
+  if (Temp <> nil) then
+    Result := StrToInt(Temp.Value);
+end;
+
+// Removes the site from the global sites array and elsewhere
 procedure RemoveSiteFromVariables(var Site: TSite);
 var I, J: Integer;
 begin
-  while (Sites.Remove(Site) <> -1) do
-    Nothing;
+  while (Sites.Remove(Site) <> -1) do Nothing();
   Sites.Pack;
   for I := 0 to Decks.Count - 1 do begin
     for J := 0 to TDeck(Decks.Items[I]).Sites.Count - 1 do begin
@@ -345,6 +377,7 @@ begin
 end;
 
 
+// Splits the string into words
 function SplitTextIntoWords(const S: string): TStringList;
 var
   startpos, endpos: Integer;
@@ -367,23 +400,60 @@ begin
 end;
 
 
+// Returns a formatted size (e.g. '1.3 MB', '1.2 KB' etc)
 function FormatByteSize(Size: Integer): string;
- const
-   B = 1; //byte
-   KB = 1024 * B; //kilobyte
-   MB = 1024 * KB; //megabyte
-   GB = 1024 * MB; //gigabyte
- begin
-   if Size > GB then
-     Result := FormatFloat('#.## GB', Size / GB)
-   else
-     if Size > MB then
-       Result := FormatFloat('#.## MB', Size / MB)
-     else
-       if Size > KB then
-         Result := FormatFloat('#.## KB', Size / KB)
-       else
-         Result := FormatFloat('#.## bytes', Size);
+const
+  B = 1; //byte
+  KB = 1024 * B; //kilobyte
+  MB = 1024 * KB; //megabyte
+  GB = 1024 * MB; //gigabyte
+begin
+  if Size > GB then
+    Result := FormatFloat('#.## GB', Size / GB)
+  else begin
+    if Size > MB then
+      Result := FormatFloat('#.## MB', Size / MB)
+    else begin
+      if Size > KB then
+        Result := FormatFloat('#.## KB', Size / KB)
+      else
+        Result := FormatFloat('#.## bytes', Size);
+    end;
+  end;
+end;
+
+
+// Returns the application version, e.g. '1.0.1.44'
+function GetApplicationVersion(): String;
+var
+  V1, V2, V3, V4: Word;
+  VerInfoSize, VerValueSize, Dummy: DWORD;
+  VerInfo: Pointer;
+  VerValue: PVSFixedFileInfo;
+begin
+  V1 := 0; V2 := 0; V3 := 0; V4 := 0;
+  VerInfoSize := GetFileVersionInfoSize(PChar(ParamStr(0)), Dummy);
+  VerInfo := nil;
+  if VerInfoSize > 0 then
+  begin
+    try
+      GetMem(VerInfo, VerInfoSize);
+      if GetFileVersionInfo(PChar(Application.ExeName), 0, VerInfoSize, VerInfo) then
+      begin
+        VerQueryValue(VerInfo, '\', Pointer(VerValue), VerValueSize);
+        with VerValue^ do
+        begin
+          V1 := dwFileVersionMS shr 16;
+          V2 := dwFileVersionMS and $FFFF;
+          V3 := dwFileVersionLS shr 16;
+          V4 := dwFileVersionLS and $FFFF;
+        end;
+      end;
+    finally
+      FreeMem(VerInfo, VerInfoSize);
+    end;
+  end;
+  Result := Format('%d.%d.%d.%d', [V1, V2, V3, V4]);
 end;
 
 

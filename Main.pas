@@ -1,72 +1,19 @@
 (**
- * Application main form and most of logic.
+ * Application main form and all interface logic.
  *
  * @author    Erki Suurjaak
  * @created   12.20.2003
- * @modified  03.11.2011
+ * @modified  04.11.2011
  *)
-{$A8,B-,C+,D+,E-,F-,G+,H+,I+,J+,K-,L+,M-,N+,O+,P+,Q-,R-,S-,T-,U-,V+,W-,X+,Y+,Z1}
-{$MINSTACKSIZE $00004000}
-{$MAXSTACKSIZE $00100000}
-{$IMAGEBASE $00400000}
-{$APPTYPE GUI}
-{$WARN SYMBOL_DEPRECATED ON}
-{$WARN SYMBOL_LIBRARY ON}
-{$WARN SYMBOL_PLATFORM ON}
-{$WARN UNIT_LIBRARY ON}
-{$WARN UNIT_PLATFORM ON}
-{$WARN UNIT_DEPRECATED ON}
-{$WARN HRESULT_COMPAT ON}
-{$WARN HIDING_MEMBER ON}
-{$WARN HIDDEN_VIRTUAL ON}
-{$WARN GARBAGE ON}
-{$WARN BOUNDS_ERROR ON}
-{$WARN ZERO_NIL_COMPAT ON}
-{$WARN STRING_CONST_TRUNCED ON}
-{$WARN FOR_LOOP_VAR_VARPAR ON}
-{$WARN TYPED_CONST_VARPAR ON}
-{$WARN ASG_TO_TYPED_CONST ON}
-{$WARN CASE_LABEL_RANGE ON}
-{$WARN FOR_VARIABLE ON}
-{$WARN CONSTRUCTING_ABSTRACT ON}
-{$WARN COMPARISON_FALSE ON}
-{$WARN COMPARISON_TRUE ON}
-{$WARN COMPARING_SIGNED_UNSIGNED ON}
-{$WARN COMBINING_SIGNED_UNSIGNED ON}
-{$WARN UNSUPPORTED_CONSTRUCT ON}
-{$WARN FILE_OPEN ON}
-{$WARN FILE_OPEN_UNITSRC ON}
-{$WARN BAD_GLOBAL_SYMBOL ON}
-{$WARN DUPLICATE_CTOR_DTOR ON}
-{$WARN INVALID_DIRECTIVE ON}
-{$WARN PACKAGE_NO_LINK ON}
-{$WARN PACKAGED_THREADVAR ON}
-{$WARN IMPLICIT_IMPORT ON}
-{$WARN HPPEMIT_IGNORED ON}
-{$WARN NO_RETVAL ON}
-{$WARN USE_BEFORE_DEF ON}
-{$WARN FOR_LOOP_VAR_UNDEF ON}
-{$WARN UNIT_NAME_MISMATCH ON}
-{$WARN NO_CFG_FILE_FOUND ON}
-{$WARN MESSAGE_DIRECTIVE ON}
-{$WARN IMPLICIT_VARIANTS ON}
-{$WARN UNICODE_TO_LOCALE ON}
-{$WARN LOCALE_TO_UNICODE ON}
-{$WARN IMAGEBASE_MULTIPLE ON}
-{$WARN SUSPICIOUS_TYPECAST ON}
-{$WARN PRIVATE_PROPACCESSOR ON}
-{$WARN UNSAFE_TYPE ON}
-{$WARN UNSAFE_CODE ON}
-{$WARN UNSAFE_CAST ON}
 unit Main;
 
 interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  ExtCtrls, StdCtrls, ComCtrls, Persistence, Globals, Mask, DataClasses,
-  ElHashList, Menus, PDJRotoLabel, jpeg, Buttons, UHTMLabel, htmlabel,
-  SyncObjs, ExtDlgs;
+  ExtCtrls, StdCtrls, ComCtrls, Globals, Mask, DataClasses,
+  Menus, PDJRotoLabel, Buttons, UHTMLabel, htmlabel,
+  ExtDlgs, Imaging;
 
 type
   TMainForm = class(TForm)
@@ -196,7 +143,7 @@ type
     Comment: TUniHTMLabel;
     SiteText: TUniHTMLabel;
     SaveImageDialog: TSaveDialog;
-    ButtonSaveAsNewCard: TBitBtn;
+    ButtonSaveCardAs: TBitBtn;
     ButtonSaveDeckAs: TBitBtn;
     LabelCardListStats: TLabel;
     CardThumbnail: TImage;
@@ -233,9 +180,9 @@ type
     InfoDatabaseCardsCaption: TLabel;
     InfoDatabaseSitesCaption: TLabel;
     InfoDatabaseDecksCaption: TLabel;
-    EditHiddenComment: TMemo;
+    EditInternalComment: TMemo;
     LabelEditHiddenComment: TLabel;
-    EditSiteComment: TMemo;
+    EditSiteInternalComment: TMemo;
     LabelEditSiteComment: TLabel;
     PanelDeckFields: TPanel;
     LabelDeckShadowStats: TLabel;
@@ -248,6 +195,8 @@ type
     LabelEditDeckComment: TLabel;
     PanelCardCoverLeft: TPanel;
     PanelCardCoverBottom: TPanel;
+    PanelSiteBottomCover: TPanel;
+    PanelSiteLeftCover: TPanel;
     procedure ButtonSavePictureClick(Sender: TObject);
     procedure ButtonPreviewCardClick(Sender: TObject);
     procedure ExitButtonClick(Sender: TObject);
@@ -270,7 +219,7 @@ type
     procedure ButtonFunctionNotAvailableClick(Sender: TObject);
     procedure ComboRaceChange(Sender: TObject);
     procedure ComboCardTypeChange(Sender: TObject);
-    procedure ButtonSaveAsNewCardClick(Sender: TObject);
+    procedure ButtonSaveCardAsClick(Sender: TObject);
     procedure ButtonUndoCardChangesClick(Sender: TObject);
     procedure EditDeckChange(Sender: TObject);
     procedure ButtonUndoDeckChangesClick(Sender: TObject);
@@ -332,7 +281,7 @@ type
     // Cleans the data fields in the card editor that correspond to the ID
     procedure ClearFields(WinControl: TWinControl; ID: Integer);
     // Retrieves all the initial data from the database required for working
-    procedure LoadData;
+    procedure LoadData();
     // Checks whether the control's tag matches the specified tag.
     // Controls' tags are sums of powers of 2, and check tags
     // just powers of 2.
@@ -346,9 +295,9 @@ type
     // Loads the specified site into the site editor
     procedure LoadSite(var Site: TSite);
     // Previews the card picture in the card editor
-    procedure PreviewCard(var Card: TCard);
+    procedure PreviewCard(var Card: TCard; UpdatePicture: Boolean = True);
     // Previews the site picture in the site editor
-    procedure PreviewSite(var Site: TSite);
+    procedure PreviewSite(var Site: TSite; UpdatePicture: Boolean = True);
     // Makes the specified item selected in the combobox, if it exists
     procedure SelectComboItem(ComboBox: TComboBox; Item: String);
     // Updates all the variables and controls to reflect a card change
@@ -418,28 +367,21 @@ type
     procedure PopulateListDeckAllSites();
     // Resets the card list page, disabling filters etc
     procedure ResetCardList();
-    // Saves the current card image into a file
-    procedure SaveCurrentCardImage(Filename: String);
-    // Saves the current site image into a file
-    procedure SaveCurrentSiteImage(Filename: String);
     // Returns the screen image of the current card
     function GetCurrentCardImage(): TBitmap;
-    // Captures an area of the application window.
-    function CaptureRect(Area: TRect): TBitmap;
-    // Function passed to resizer threads as callback
-    procedure ResizerThreadCallback(ID: Integer; Resized: TBitmap);
+    // Function passed to resizer threads as callback, will set the resized
+    // picture to the appropriate item and UI attributes
+    procedure ResizeCallback(Resized: TBitmap; ResizeType: TResizeType; Item: TDataClass);
     // Loads a picture for the current card, either file file or URL
     procedure LoadCardPicture(Location, LocationType: String);
     // Loads a picture for the current site, either file file or URL
     procedure LoadSitePicture(Location, LocationType: String);
-    // Updates the database information on first page
+    // Updates the database information (name, size, cards count) on first page
     procedure UpdateDatabaseInfo();
     // Opens the specified database and loads its content
     procedure OpenDatabase(Filename: String);
     // Creates the new card dialog form
     procedure CreateNewCardDialog();
-  public
-    { Public declarations }
   end;
 
   TListSortCompare = function (Item1, Item2: Pointer): Integer;
@@ -449,68 +391,42 @@ var
   NewCardDialog: TForm;
   NewCardComboCardType: TComboBox;
   NewCardComboRace: TComboBox;
-  Database: TPersistence;
-  // Maps the positions in ComboCardList to TCard objects
-  ComboCardListMap: TElHashList;
-  ComboListDecksMap: TElHashList;
-  ComboSiteListMap: TElHashList;
-  IsCardChanged: Boolean = False;
-  IsDeckChanged: Boolean = False;
-  IsSiteChanged: Boolean = False;
-  ListCardsSortInfo: TSortInfo;
-  ListDecksSortInfo: TSortInfo;
-  ListDeckAllCardsSortInfo: TSortInfo;
-  ListDeckCardsSortInfo: TSortInfo;
-  ListDeckAllSitesSortInfo: TSortInfo;
-  ListDeckSitesSortInfo: TSortInfo;
-  ListCardsFilterRace: String = '';
-  ListCardsFilterType: String = '';
-  ListCardsFilterTime: String = '';
-  DBFilename: String;
-  ListCardsFilterDeck: TDeck = nil;
-  ApplyFilter: Boolean = False;
-  IgnoreCardChanges: Boolean = False;
-  IgnoreSiteChanges: Boolean = False;
-  IgnoreDeckChanges: Boolean = False;
-  PendingThumbnails: TList;
-  PendingThumbnailCards: TList;
-  ResizerSection: TCriticalSection;
-  PreviewedCard: TCard = nil;
-  PendingResizesMap: TElHashList;
-  ResizerIDCounter: Integer = 0;
-  TransparentPixel: TPicture;
 
 
 implementation
 
-uses Imaging, strutils, Math, Clipbrd, pngimage;
+uses Persistence, ElHashList, strutils, Math, Clipbrd, httpprot, SyncObjs;
 
 {$R *.DFM}
 
 
 procedure TMainForm.ButtonSavePictureClick(Sender: TObject);
 var Filename: String;
+    Bitmap: TBitmap;
 begin
    SaveImageDialog.Filename := CurrentCard.GetShowName();
    if (SaveImageDialog.Execute()) then begin
      Application.ProcessMessages(); // Let dialog disappear
      Filename := SaveImageDialog.Filename;
-     SaveCurrentCardImage(Filename);
+     Bitmap := GetCurrentCardImage();
+     Imager.SavePictureToDisk(Bitmap, Filename);
    end;
 end;
+
 
 procedure TMainForm.ButtonPreviewCardClick(Sender: TObject);
 begin
   PreviewCard(CurrentCard);
 end;
 
+
 procedure TMainForm.ExitButtonClick(Sender: TObject);
 begin
   Close();
 end;
 
+
 procedure TMainForm.FormCreate(Sender: TObject);
-var Picture: TPicture;
 begin
   MainForm.DoubleBuffered := True;
   PageControl.ActivePage := PageDatabase;
@@ -519,32 +435,26 @@ begin
   PageSiteEditor.TabVisible := False;
   PageCardList.TabVisible := False;
   DatabaseInfoPanel.Visible := False;
-  Database := TPersistence.Create();
   Imager := TImaging.Create();
+  CardLoadSection := TCriticalSection.Create();
   ListCardsSortInfo := TSortInfo.Create();
   ListDecksSortInfo := TSortInfo.Create();
   ListDeckAllCardsSortInfo := TSortInfo.Create();
   ListDeckCardsSortInfo := TSortInfo.Create();
   ListDeckSitesSortInfo := TSortInfo.Create();
   ListDeckAllSitesSortInfo := TSortInfo.Create();
-  Picture := Imager.GetResource('LOTW_Title', 'png');
-  LOTWLogoPicture.Picture.Assign(Picture);
-  Picture.Free();
-  Picture := Imager.GetResource('LOTW_Cardspread', 'png');
-  LOTWCardspreadPicture.Picture.Assign(Picture);
-  Picture.Free();
-  Picture := Imager.GetResource('LOTW_Cards', 'png');
-  LOTWCardsPicture.Picture.Assign(Picture);
-  Picture.Free();
-  Picture := Imager.GetResource('LOTW_Sites', 'png');
-  LOTWSitesPicture.Picture.Assign(Picture);
-  Picture.Free();
-  Picture := Imager.GetResource('LOTW_Decks', 'png');
-  LOTWDecksPicture.Picture.Assign(Picture);
-  Picture.Free();
-  TransparentPixel := Imager.GetResource('Transparent_Pixel', 'png');
+  LOTWLogoPicture.Picture.Assign(Imager.GetResource('LOTW_Title', '.png'));
+  LOTWCardspreadPicture.Picture.Assign(Imager.GetResource('LOTW_Cardspread', '.png'));
+  LOTWCardsPicture.Picture.Assign(Imager.GetResource('LOTW_Cards', '.png'));
+  LOTWSitesPicture.Picture.Assign(Imager.GetResource('LOTW_Sites', '.png'));
+  LOTWDecksPicture.Picture.Assign(Imager.GetResource('LOTW_Decks', '.png'));
+  SiteBackgroundPicture.Picture.Assign(Imager.GetResource('Site_Background', '.png'));
+  SiteTwilightCostPicture.Picture.Assign(Imager.GetResource('Site_Twilight_Cost', '.png'));
+  TransparentPixel := Imager.GetResource('Transparent_Pixel', '.png');
+  CopyrightLabel.Caption := Format(COPYRIGHT_TEXT_TEMPLATE, [GetApplicationVersion()]);
   CreateNewCardDialog();
 end;
+
 
 procedure TMainForm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
@@ -552,6 +462,7 @@ begin
     Action := caNone
   else begin
     FreeAndNil(Imager);
+    FreeAndNil(CardLoadSection);
     FreeAndNil(Database);
     FreeAndNil(Decks);
     FreeAndNil(Cards);
@@ -561,14 +472,16 @@ begin
     FreeAndNil(ComboSiteListMap);
     FreeAndNil(PendingThumbnails);
     FreeAndNil(PendingThumbnailCards);
-    FreeAndNil(PendingResizesMap);
-    FreeAndNil(ResizerSection);
     FreeAndNil(NewCardDialog);
     FreeAndNil(TransparentPixel);
   end;
 end;
 
 
+// Checks whether the current card, deck and site have changed,
+// and asks the user whether to save or not or to cancel the operation.
+// If the user chooses to save, saves the appropriate item.
+// Returns mrCancel if the user chose to cancel either operation.
 function TMainForm.GetCheckSavingResult(CheckCard, CheckDeck, CheckSite: Boolean): Integer;
 var CardResult, DeckResult, SiteResult: Integer;
 begin
@@ -609,7 +522,6 @@ begin
 end;
 
 
-
 procedure TMainForm.NumberEditKeyPress(Sender: TObject; var Key: Char);
 begin
   if (Sender is TEdit) then begin
@@ -622,13 +534,13 @@ begin
 end;
 
 
-
+// Opens the specified database and loads its content
 procedure TMainForm.OpenDatabase(Filename: String);
 begin
   try
+    Database := TPersistence.Create(Filename);
     DBFilename := Filename;
     MainForm.Enabled := False;
-    Database.Connect(DBFilename);
     ResetCardEditor();
     ResetDeckEditor();
     ResetSiteEditor();
@@ -650,6 +562,7 @@ begin
   end;
 end;
 
+
 procedure TMainForm.ButtonNewCardClick(Sender: TObject);
 var Choice: Integer;
 begin
@@ -661,7 +574,6 @@ begin
   Choice := NewCardDialog.ShowModal();
   if (Choice = mrOk) then begin
     if (GetCheckSavingResult(True, False, False) <> mrCancel) then begin
-      PanelCardCover.Visible := True;
       CurrentCard := TCard.Create();
       CurrentCard.CardType := NewCardComboCardType.Items[NewCardComboCardType.ItemIndex];
       CurrentCard.Race := GetRaceByName(NewCardComboRace.Items[NewCardComboRace.ItemIndex]);
@@ -677,6 +589,7 @@ begin
 end;
 
 
+// Cleans the data fields in the card editor that correspond to the ID
 procedure TMainForm.ClearFields(WinControl: TWinControl; ID: Integer);
 var I: Integer;
     CurrentControl: TControl;
@@ -699,10 +612,6 @@ begin
     end;
   end;
 end;
-
-
-
-
 
 
 procedure TMainForm.ButtonSaveCardClick(Sender: TObject);
@@ -728,6 +637,7 @@ begin
 end;
 
 
+// Saves the current card, if any
 procedure TMainForm.SaveCurrentCard();
 var I: Integer;
     TempCard: TCard;
@@ -760,6 +670,7 @@ begin
 end;
 
 
+// Saves the current site, if any
 procedure TMainForm.SaveCurrentSite();
 var I: Integer;
     TempSite: TSite;
@@ -786,6 +697,7 @@ begin
 end;
 
 
+// Sets the data in the card editor interface to the card object
 procedure TMainForm.SetInterfaceDataToCard(Card: TCard);
 begin
   if (Length(EditTwilightCost.Text) = 0) then
@@ -815,12 +727,13 @@ begin
   Card.Comment := EditComment.Text;
   Card.PictureFilename := EditPictureFilename.Text;
   Card.Title := EditTitle.Text;
-  Card.HiddenComment := EditHiddenComment.Text;
+  Card.InternalComment := EditInternalComment.Text;
   Card.ShowName := '';
 end;
 
 
 
+// Sets the data in the site editor interface to the site object
 procedure TMainForm.SetInterfaceDataToSite(Site: TSite);
 begin
   Site.Title := EditSiteTitle.Text;
@@ -829,12 +742,13 @@ begin
   Site.TwilightCost := StrToInt(EditSiteTwilightCost.Text);
   Site.Text := EditSiteText.Text;
   Site.Direction := ComboSiteDirections.Text;
-  Site.Comment := EditSiteComment.Text;
+  Site.Comment := EditSiteInternalComment.Text;
   Site.ShowName := '';
 end;
 
 
 
+// Sets the data in the card to the card editor interface
 procedure TMainForm.SetCardDataToInterface(Card: TCard);
 begin
   ClearFields(PageCardEditor, TAG_NEW_CARD);
@@ -854,16 +768,17 @@ begin
   EditComment.Text := Card.Comment;
   EditPictureFilename.Text := Card.PictureFilename;
   EditTitle.Text := Card.Title;
-  EditHiddenComment.Text := Card.HiddenComment;
+  EditInternalComment.Text := Card.InternalComment;
   PanelCardFields.Visible := True;
   ButtonPreviewCard.Enabled := True;
   ButtonDeleteCard.Enabled := True;
-  ButtonSaveAsNewCard.Enabled := True;
+  ButtonSaveCardAs.Enabled := True;
   ButtonSavePicture.Enabled := True;
 end;
 
 
 
+// Sets the data in the site to the site editor interface
 procedure TMainForm.SetSiteDataToInterface(Site: TSite);
 begin
   ClearFields(PageSiteEditor, TAG_NEW_SITE);
@@ -883,7 +798,7 @@ begin
     SiteTimeOfCreation.Caption := 'Created ' + Site.TimeOfCreation
   else
     SiteTimeOfCreation.Caption := '';
-  EditSiteComment.Text := Site.Comment;    
+  EditSiteInternalComment.Text := Site.Comment;    
   PanelSiteFields.Visible := True;
   ButtonPreviewSite.Enabled := True;
   ButtonDeleteSite.Enabled := True;
@@ -893,6 +808,7 @@ end;
 
 
 
+// Retrieves all the initial data from the database required for working
 procedure TMainForm.LoadData();
 var I: Integer;
     Race: TRace;
@@ -904,8 +820,6 @@ begin
   ComboSiteListMap := TElHashList.Create();
   PendingThumbnails := TList.Create();
   PendingThumbnailCards := TList.Create();
-  PendingResizesMap := TElHashList.Create();
-  ResizerSection := TCriticalSection.Create();
   Times := Database.RetrieveTimes();
   Races := Database.RetrieveRaces();
   Sites := Database.RetrieveSites();
@@ -957,7 +871,7 @@ procedure TMainForm.CardsUpdate();
 var I: Integer;
     Card: TCard;
 begin
-  Cards.Sort(@CardListSortCompare);
+  Cards.Sort(CardListSortCompare);
   ComboCardList.Items.Clear;
   ComboCardListMap.Clear();
   for I := 0 to Cards.Count - 1 do begin
@@ -972,6 +886,7 @@ begin
 end;
 
 
+// Updates all the variables and controls to reflect a deck change
 procedure TMainForm.DecksUpdate();
 var I: Integer;
     Deck: TDeck;
@@ -1005,11 +920,12 @@ begin
 end;
 
 
+// Updates all the variables and controls to reflect a site change
 procedure TMainForm.SitesUpdate();
 var I: Integer;
     Site: TSite;
 begin
-  Sites.Sort(@SiteListSortCompare);
+  Sites.Sort(SiteListSortCompare);
   ComboSiteList.Items.Clear;
   ComboSiteListMap.Clear();
   for I := 0 to Sites.Count - 1 do begin
@@ -1019,10 +935,14 @@ begin
   end;
   PopulateListDeckAllSites();
   PopulateListDeckSites();
+  UpdateDatabaseInfo();
 end;
 
 
 
+// Checks whether the control's tag matches the specified tag.
+// Controls' tags are sums of powers of 2, and check tags
+// just powers of 2.
 function TMainForm.MatchesTag(var Control: TControl; Tag: Integer): Boolean;
 begin
   // if one power of 2 is contained in the other, xor returns
@@ -1036,6 +956,7 @@ begin
 end;
 
 
+// Changes the interface for the type (shadow event, stud club possession etc)
 procedure TMainForm.ChangeCardEditorInterface(var Card: TCard);
 begin
   //BackgroundPicture.Picture := nil;
@@ -1066,6 +987,7 @@ begin
 end;
 
 
+// Changes the visibility of the card editor interface components
 procedure TMainForm.ChangeCardEditorVisibility(Control: TWinControl; var Card: TCard);
 var I: Integer;
     CurrentControl: TControl;
@@ -1088,13 +1010,13 @@ end;
 
 
 
+// Loads the specified card into the card editor
 procedure TMainForm.LoadCard(var Card: TCard);
 var I: Integer;
     TempCard: TCard;
 begin
   try
     IgnoreCardChanges := True;
-    PanelCardCover.Visible := True;
     MainForm.Enabled := False;
     MainForm.Cursor := crHourGlass;
     SetCardDataToInterface(Card);
@@ -1116,45 +1038,43 @@ begin
 end;
 
 
-procedure TMainForm.PreviewCard(var Card: TCard);
-var Temp, TitleTemp, Inter, NextWord: String;
+// Previews the card picture in the card editor
+procedure TMainForm.PreviewCard(var Card: TCard; UpdatePicture: Boolean = True);
+var Temp, TimeTemp, TitleTemp, Inter, NextWord: String;
     Screenshot: TBitmap;
     Words: TStringList;
     I: Integer;
-    Info: TResizeInfo;
 begin
-  PanelCardCover.Visible := True;
+  // Always compare before replacing values, to avoid flickering
   try
     TwilightCost.Caption := EditTwilightCost.Text;
     if ((Card.CardType = CARD_TYPE_CHARACTER)
         or (Card.CardType = CARD_TYPE_POSSESSION)) then begin
-      Strength.Caption := EditStrength.Text;
-      Health.Caption := EditHealth.Text;
+      if (Strength.Caption <> EditStrength.Text) then Strength.Caption := EditStrength.Text;
+      if (Health.Caption <> EditHealth.Text) then Health.Caption := EditHealth.Text;
     end else begin
       Strength.Caption := '';
       Health.Caption := '';
     end;
-    Time.Caption := '';
+    TimeTemp := '';
     Temp := AnsiUpperCase(EditTitle.Text);
     if (CheckIsUnique.Checked) then Temp := UNIQUE_SYMBOL + ' ' + Temp;
     if (Card.CardType = CARD_TYPE_CHARACTER) then begin
       VerticalTitle.Visible := False;
       VerticalTitleLine1.Visible := False;
       VerticalTitleLine2.Visible := False;
-      Title.Visible := True;
       Title.Caption := Temp;
+      Title.Visible := True;
       if (not Card.Race.IsGood) then
         if (ComboTime.ItemIndex > -1) then
-          Time.Caption := ComboTime.Items[ComboTime.ItemIndex];
+          TimeTemp := ComboTime.Items[ComboTime.ItemIndex];
     end else begin
       Title.Visible := False;
-      VerticalTitle.Visible := False;
-      VerticalTitleLine1.Visible := False;
-      VerticalTitleLine2.Visible := False;
       // Longer texts do not fit into the label, and it doesn't wrap
       // automatically: hack it into two labels
       if (Length(Temp) > 22) then
         begin
+        VerticalTitle.Visible := False;
         Words := SplitTextIntoWords(Temp);
         if (Words.Count > 0) then
           begin
@@ -1169,8 +1089,8 @@ begin
             Inc(I);
             if (I < Words.Count) then NextWord := Words.Strings[I] else NextWord := '';
             end;
+          if VerticalTitleLine1.Caption <> TitleTemp then VerticalTitleLine1.Caption := TitleTemp;
           VerticalTitleLine1.Visible := True;
-          VerticalTitleLine1.Caption := TitleTemp;
           TitleTemp := '';
           Inter := '';
           while ((Length(TitleTemp + NextWord) < 22) and (I < Words.Count)) do
@@ -1180,8 +1100,8 @@ begin
             Inc(I);
             if (I < Words.Count) then NextWord := Words.Strings[I] else NextWord := '';
             end;
+          if VerticalTitleLine2.Caption <> TitleTemp then VerticalTitleLine2.Caption := TitleTemp;
           VerticalTitleLine2.Visible := True;
-          VerticalTitleLine2.Caption := TitleTemp;
           end;
         Words.Free();
         end
@@ -1189,35 +1109,44 @@ begin
         begin
         VerticalTitle.Visible := True;
         VerticalTitle.Caption := Temp;
+        VerticalTitleLine1.Visible := False;
+        VerticalTitleLine2.Visible := False;
         end;
     end;
-    Subtitle.Caption := '';
+    if Time.Caption <> TimeTemp then Time.Caption := TimeTemp;
+    Temp := '';
     if (Card.CardType = CARD_TYPE_CHARACTER) then begin
-      Subtitle.Caption := AnsiUpperCase(EditSubtitle.Text);
+      if (Subtitle.Caption <> AnsiUpperCase(EditSubtitle.Text)) then Subtitle.Caption := AnsiUpperCase(EditSubtitle.Text);
       if (Card.Race.IsGood) then
-        MiddleTitle.Caption := AnsiUpperCase('companion')
+        Temp := AnsiUpperCase('companion')
       else
-        MiddleTitle.Caption := AnsiUpperCase('minion');
-      MiddleTitle.Caption := MiddleTitle.Caption + ' ' + MIDDLE_DOT + ' ' +
-                             AnsiUpperCase(Card.Race.Name);
+        Temp := AnsiUpperCase('minion');
+      Temp := Temp + ' ' + MIDDLE_DOT + ' ' +
+              AnsiUpperCase(Card.Race.Name);
     end else if (Card.CardType = CARD_TYPE_POSSESSION) then begin
-      MiddleTitle.Caption := AnsiUpperCase(Card.CardType);
+      Subtitle.Caption := '';
+      Temp := AnsiUpperCase(Card.CardType);
       if (Length(EditPossessionType.Text) > 0) then
-        MiddleTitle.Caption := MiddleTitle.Caption + ' ' + MIDDLE_DOT + ' ' +
-                               AnsiUpperCase(EditPossessionType.Text);
+        Temp := Temp + ' ' + MIDDLE_DOT + ' ' +
+                AnsiUpperCase(EditPossessionType.Text);
       StrengthPicture.Visible := (Length(EditStrength.Text) > 0);
       HealthPicture.Visible := (Length(EditHealth.Text) > 0);
     end else begin
-      MiddleTitle.Caption := AnsiUpperCase(Card.CardType);
+      Temp := AnsiUpperCase(Card.CardType);
     end;
-    Text.HTMLText := StringReplace(EditText.Lines.Text, NEW_LINE, '<br>', [rfReplaceAll]);
-    Comment.HTMLText := StringReplace(EditComment.Lines.Text, NEW_LINE, '<br>', [rfReplaceAll]);
-    ContentPicture.Picture.Assign(TransparentPixel);
-    if Card.ContentPicture <> nil then begin
-      ContentPicture.Picture.Assign(Card.ContentPicture);
-    end else if (Length(Card.PictureFilename) > 0) then begin
-      Card.ContentPicture := Database.RetrieveContentPicture(Card);
-      ContentPicture.Picture.Assign(Card.ContentPicture);
+    if (MiddleTitle.Caption <> Temp) then MiddleTitle.Caption := Temp;
+    Temp := StringReplace(EditText.Lines.Text, NEW_LINE, '<br>', [rfReplaceAll]);
+    if (Text.HTMLText <> Temp) then Text.HTMLText := Temp;
+    Temp := StringReplace(EditComment.Lines.Text, NEW_LINE, '<br>', [rfReplaceAll]);
+    if (Comment.HTMLText <> Temp) then Comment.HTMLText := Temp;
+    if (UpdatePicture) then begin
+      ContentPicture.Picture.Assign(TransparentPixel);
+      if Card.ContentPicture <> nil then begin
+        ContentPicture.Picture.Assign(Card.ContentPicture);
+      end else if (Length(Card.PictureFilename) > 0) then begin
+        Card.ContentPicture := Database.RetrieveContentPicture(Card);
+        ContentPicture.Picture.Assign(Card.ContentPicture);
+      end;
     end;
   finally
     PanelCardCover.Visible := False;
@@ -1225,83 +1154,32 @@ begin
     Comment.Top := Text.Top + Text.Height - 2;
     Application.ProcessMessages();
   end;
-  if ((IsCardChanged or (Card.Thumbnail = nil))) then begin
+  if (UpdatePicture and (IsCardChanged or (Card.Thumbnail = nil))) then begin
     Screenshot := GetCurrentCardImage();
     if Card.Thumbnail = nil then Card.Thumbnail := TPicture.Create();
-    ResizerSection.Enter();
-    Info := TResizeInfo.Create(CurrentCard, rsThumbnail);
-    PendingResizesMap.AddItem(IntToStr(ResizerIDCounter), Info);
-    TResizerThread.Create(ResizerIDCounter, Screenshot,
-                          StrToInt(GetSetting('CardThumbnailWidth')),
-                          StrToInt(GetSetting('CardThumbnailHeight')),
-                          ResizerThreadCallback);
-    Inc(ResizerIDCounter);
-    ResizerSection.Leave();
+    Imager.QueueResize(Screenshot, GetSettingInt('CardThumbnailWidth'),
+                       GetSettingInt('CardThumbnailHeight'), Card, rsThumbnail,
+                       ResizeCallback);
     Screenshot.Free();
   end;
 end;
 
 
-procedure TMainForm.ResizerThreadCallback(ID: Integer; Resized: TBitmap);
-var
-  IDHash: String;
-  Card: TCard;
-  Site: TSite;
-  Info: TResizeInfo;
-begin
-  ResizerSection.Enter();
-  try
-    IDHash := IntToStr(ID);
-    Info := PendingResizesMap.Item[IDHash];
-    if (Info <> nil) then begin
-      PendingResizesMap.DeleteItem(IDHash);
-      if (Resized <> nil) then begin
-        if Info.Item is TCard then begin
-          Card := TCard(Info.Item);
-          case Info.ResizeType of
-            rsThumbnail: begin
-              Card.Thumbnail.Assign(Resized);
-              if (PreviewedCard = Card) then CardThumbnail.Picture.Assign(Card.Thumbnail);
-            end;
-            rsContent: begin
-              Card.ContentPicture.Assign(Resized);
-              ContentPicture.Picture.Assign(Card.ContentPicture);
-            end;
-          end;
-        end else if Info.Item is TSite then begin
-          Site := TSite(Info.Item);
-          case Info.ResizeType of
-            rsContent: begin
-              Site.ContentPicture.Assign(Resized);
-              SiteContentPicture.Picture.Assign(Site.ContentPicture);
-            end;
-          end;
-        end else begin
-          raise Exception('Unsupported data class for resize: "' + Info.Item.ClassName + '".');
-        end;
-      end;
-    end;
-  finally
-    ResizerSection.Leave();
-  end;
-end;
-
-
-
-procedure TMainForm.PreviewSite(var Site: TSite);
+// Previews the site picture in the site editor
+procedure TMainForm.PreviewSite(var Site: TSite; UpdatePicture: Boolean = True);
 var Temp: String;
 begin
-  PanelSitePicture.Visible := False;
+//  PanelSitePicture.Visible := False;
   try
-    SiteBackgroundPicture.Picture.Assign(Imager.GetResource('Site_Background', 'png'));
-    SiteTwilightCostPicture.Picture.Assign(Imager.GetResource('Site_Twilight_Cost', 'png'));
-    SiteContentPicture.Picture.Assign(TransparentPixel);
 
-    if Site.ContentPicture <> nil then begin
-      SiteContentPicture.Picture.Assign(Site.ContentPicture);
-    end else if (Length(Site.PictureFilename) > 0) then begin
-      Site.ContentPicture := Database.RetrieveContentPicture(Site);
-      SiteContentPicture.Picture.Assign(Site.ContentPicture);
+    if UpdatePicture then begin
+      SiteContentPicture.Picture.Assign(TransparentPixel);
+      if Site.ContentPicture <> nil then begin
+        SiteContentPicture.Picture.Assign(Site.ContentPicture);
+      end else if (Length(Site.PictureFilename) > 0) then begin
+        Site.ContentPicture := Database.RetrieveContentPicture(Site);
+        SiteContentPicture.Picture.Assign(Site.ContentPicture);
+      end;
     end;
     SiteTitle.Caption := AnsiUpperCase(EditSiteTitle.Text);
     SiteTime.Caption := ComboSiteTimes.Text;
@@ -1313,19 +1191,53 @@ begin
       SiteTwilightCost.Caption := EditSiteTwilightCost.Text;
     end;
     if (ComboSiteDirections.Text = 'left') then begin
-      SiteDirectionPicture.Picture.Assign(Imager.GetResource('Site_Direction_Left', 'png'));
+      SiteDirectionPicture.Picture.Assign(Imager.GetResource('Site_Direction_Left', '.png'));
     end else begin
-      SiteDirectionPicture.Picture.Assign(Imager.GetResource('Site_Direction_Right', 'png'));
+      SiteDirectionPicture.Picture.Assign(Imager.GetResource('Site_Direction_Right', '.png'));
     end;
     Temp := StringReplace(EditSiteText.Lines.Text, NEW_LINE, '<br>', [rfReplaceAll]);
     SiteText.HTMLText := Temp;
   finally
-    PanelSitePicture.Visible := True;
+//    PanelSitePicture.Visible := True;
   end;
 end;
 
 
 
+// Function passed to resizer threads as callback, will set the resized
+// picture to the appropriate item and UI attributes
+procedure TMainForm.ResizeCallback(Resized: TBitmap; ResizeType: TResizeType; Item: TDataClass);
+var
+  Card: TCard;
+  Site: TSite;
+begin
+  if Item is TCard then begin
+    Card := TCard(Item);
+    case ResizeType of
+      rsThumbnail: begin
+        Card.Thumbnail.Assign(Resized);
+        if (PreviewedCard = Card) then CardThumbnail.Picture.Assign(Card.Thumbnail);
+      end;
+      rsContent: begin
+        Card.ContentPicture.Assign(Resized);
+        ContentPicture.Picture.Assign(Card.ContentPicture);
+      end;
+    end;
+  end else if Item is TSite then begin
+    Site := TSite(Item);
+    case ResizeType of
+      rsContent: begin
+        Site.ContentPicture.Assign(Resized);
+        SiteContentPicture.Picture.Assign(Site.ContentPicture);
+      end;
+    end;
+  end else begin
+    raise Exception('Unsupported data class for resize: "' + Item.ClassName + '".');
+  end;
+end;
+
+
+// Loads the specified site into the site editor
 procedure TMainForm.LoadSite(var Site: TSite);
 var I: Integer;
     TempSite: TSite;
@@ -1354,8 +1266,7 @@ begin
 end;
 
 
-
-
+// Makes the specified item selected in the combobox, if it exists
 procedure TMainForm.SelectComboItem(ComboBox: TComboBox; Item: String);
 var I: Integer;
 begin
@@ -1370,19 +1281,24 @@ end;
 procedure TMainForm.ComboCardListChange(Sender: TObject);
 var Card: TCard;
 begin
-  try
-    MainForm.Enabled := False;
-    Card := ComboCardListMap.Item[IntToStr(ComboCardList.ItemIndex)];
-    if ((Card <> CurrentCard) and (GetCheckSavingResult(True, False, False) <> mrCancel)) then begin
-      PageCardEditor.SetFocus();
-      CurrentCard := Card;
-      LoadCard(CurrentCard);
-      ComboCardList.SetFocus();
+  if not IgnoreCardChanges then begin
+    CardLoadSection.Enter();
+    try
+      MainForm.Enabled := False;
+      Card := ComboCardListMap.Item[IntToStr(ComboCardList.ItemIndex)];
+      if ((Card <> CurrentCard) and (GetCheckSavingResult(True, False, False) <> mrCancel)) then begin
+        PageCardEditor.SetFocus();
+        CurrentCard := Card;
+        LoadCard(CurrentCard);
+        ComboCardList.SetFocus();
+      end;
+    finally
+      MainForm.Enabled := True;
+      CardLoadSection.Leave();
     end;
-  finally
-    MainForm.Enabled := True;
   end;
 end;
+
 
 procedure TMainForm.ButtonDeleteCardClick(Sender: TObject);
 var
@@ -1401,7 +1317,7 @@ begin
     ButtonPreviewCard.Enabled := False;
     ButtonSaveCard.Enabled := False;
     ButtonDeleteCard.Enabled := False;
-    ButtonSaveAsNewCard.Enabled := False;
+    ButtonSaveCardAs.Enabled := False;
     ButtonUndoCardChanges.Enabled := False;
     ButtonSavePicture.Enabled := False;
     SetCardChanged(False);
@@ -1433,6 +1349,7 @@ begin
 end;
 
 
+// Loads the deck in the deck editor
 procedure TMainForm.LoadDeck(Deck: TDeck);
 begin
   IgnoreDeckChanges := True;
@@ -1461,8 +1378,6 @@ begin
   IgnoreDeckChanges := False;
   SetDeckChanged(False);
 end;
-
-
 
 
 procedure TMainForm.ViewListDeckAllCardsCard(Sender: TObject);
@@ -1500,12 +1415,15 @@ begin
   DecksUpdate();
 end;
 
+
 procedure TMainForm.ButtonSaveDeckClick(Sender: TObject);
 begin
   if (CurrentDeck <> nil) then
     SaveCurrentDeck();
 end;
 
+
+// Saves the current deck, if any
 procedure TMainForm.SaveCurrentDeck();
 begin
   CurrentDeck.Title := EditDeckTitle.Text;
@@ -1523,6 +1441,7 @@ begin
 end;
 
 
+// Sets the interface to reflect whether the current card has been changed
 procedure TMainForm.SetCardChanged(IsChanged: Boolean);
 begin
   if (not IgnoreCardChanges) then begin
@@ -1535,6 +1454,7 @@ begin
 end;
 
 
+// Sets the interface to reflect whether the current site has been changed
 procedure TMainForm.SetSiteChanged(IsChanged: Boolean);
 begin
   if (not IgnoreSiteChanges) then begin
@@ -1564,6 +1484,8 @@ begin
   end;
 end;
 
+
+// Fills in the deck statistics controls
 procedure TMainForm.ShowDeckStats();
 var I: Integer;
     ShadowCharacters, ShadowConditions, ShadowPossessions, ShadowEvents: Integer;
@@ -1618,10 +1540,7 @@ begin
 end;
 
 
-
-
-
-
+// Removes the currently active card from the deck's card list
 procedure TMainForm.RemoveCardFromDeckList();
 var Card: TDeckCard;
     ListItem: TListItem;
@@ -1636,6 +1555,7 @@ begin
 end;
 
 
+// Updates the ListDeckCards list of cards
 procedure TMainForm.UpdateDeckCardsList();
 var I, Index: Integer;
     ListItem, SelectedListItem: TListItem;
@@ -1698,6 +1618,7 @@ begin
   RemoveCardFromDeckList();
 end;
 
+
 procedure TMainForm.ButtonAddCardToDeckClick(Sender: TObject);
 var ListItem: TListItem;
     Card: TCard;
@@ -1720,54 +1641,66 @@ end;
 procedure TMainForm.EditCardChange(Sender: TObject);
 begin
   SetCardChanged(True);
+  PreviewCard(CurrentCard, False);
 end;
+
 
 procedure TMainForm.ButtonFunctionNotAvailableClick(Sender: TObject);
 begin
   ShowMessage('This function not yet available, sorry!');
 end;
 
+
 procedure TMainForm.ComboRaceChange(Sender: TObject);
 begin
   if (CurrentCard.OriginalRace = nil) then
     CurrentCard.OriginalRace := CurrentCard.Race;
   CurrentCard.Race := GetRaceByName(ComboRace.Items[ComboRace.ItemIndex]);
-  PanelCardCover.Visible := True;
   ChangeCardEditorInterface(CurrentCard);
-  PreviewCard(CurrentCard);
+  PreviewCard(CurrentCard, False);
   SetCardChanged(True);
 end;
+
 
 procedure TMainForm.ComboCardTypeChange(Sender: TObject);
 begin
   if (Length(CurrentCard.OriginalCardType) = 0) then
     CurrentCard.OriginalCardType := CurrentCard.CardType;
   CurrentCard.CardType := ComboCardType.Items[ComboCardType.ItemIndex];
-  PanelCardCover.Visible := True;
   ChangeCardEditorInterface(CurrentCard);
-  PreviewCard(CurrentCard);
+  PreviewCard(CurrentCard, False);
   SetCardChanged(True);
 end;
 
 
-procedure TMainForm.ButtonSaveAsNewCardClick(Sender: TObject);
-var NewCard: TCard;
+procedure TMainForm.ButtonSaveCardAsClick(Sender: TObject);
+var
+  Temp: String;
+  NewCard: TCard;
 begin
-  if ((Length(EditTitle.Text) = 0) or (Length(EditTwilightCost.Text) = 0)) then begin
-    MessageDlg('Every card must have a title and a twilight cost.', mtError, [mbOk], 0);
-  end else begin
+  Temp := InputBox('Save card as', 'Enter the new title of the card:', '');
+  if (Length(Temp) > 0) then begin
     NewCard := TCard.Create();
     SetInterfaceDataToCard(NewCard);
+    NewCard.Title := Temp;
     if (not IsCardTitleUnique(NewCard)) then begin
       ShowMessage('You cannot save the card as a new card, because its title (and ' +
-                  'together with subtitle if character) is not unique. ' + #13#13 +
-                  'Change either and try again.');
+                  'together with subtitle if character) is not unique.');
+      NewCard.Free();
     end else begin
+      EditTitle.Text := Temp;
       if (Length(CurrentCard.OriginalCardType) > 0) then
         CurrentCard.CardType := CurrentCard.OriginalCardType;
       if (CurrentCard.OriginalRace <> nil) then
         CurrentCard.Race := CurrentCard.OriginalRace;
+      // Copy over content picture
+      if CurrentCard.ContentPicture <> nil then begin
+        NewCard.ContentPicture := TPicture.Create();
+        NewCard.ContentPicture.Bitmap.Assign(CurrentCard.ContentPicture);
+      end;
       if (CurrentCard.OriginalContentPicture <> nil) then begin
+        // Card picture has been changed, but is being saved under a different
+        // name - restore the original card's condition.
         FreeAndNil(CurrentCard.ContentPicture);
         CurrentCard.ContentPicture := CurrentCard.OriginalContentPicture;
         CurrentCard.OriginalContentPicture := nil;
@@ -1776,11 +1709,13 @@ begin
       CurrentCard.OriginalRace := nil;
       CurrentCard := NewCard;
       SaveCurrentCard();
+      PreviewCard(CurrentCard);
     end;
   end;
 end;
 
 
+// Checks whether the card has a unique title-subtitle combination
 function TMainForm.IsCardTitleUnique(Card: TCard): Boolean;
 var I: Integer;
 begin
@@ -1800,6 +1735,7 @@ end;
 
 
 
+// Checks whether the deck has a unique title
 function TMainForm.IsDeckTitleUnique(Deck: TDeck): Boolean;
 var I: Integer;
 begin
@@ -1812,6 +1748,8 @@ begin
       end;
 end;
 
+
+// Checks whether the site has a unique title
 function TMainForm.IsSiteTitleUnique(Site: TSite): Boolean;
 var I: Integer;
 begin
@@ -1823,7 +1761,6 @@ begin
         Break;
       end;
 end;
-
 
 
 procedure TMainForm.ButtonUndoCardChangesClick(Sender: TObject);
@@ -1845,10 +1782,12 @@ begin
   SetCardChanged(False);
 end;
 
+
 procedure TMainForm.EditDeckChange(Sender: TObject);
 begin
   SetDeckChanged(True);
 end;
+
 
 procedure TMainForm.ButtonUndoDeckChangesClick(Sender: TObject);
 begin
@@ -1856,6 +1795,7 @@ begin
 end;
 
 
+// Undos the changes made to the current deck
 procedure TMainForm.UndoCurrentDeckChanges();
 var I: Integer;
     DeckCard: TDeckCard;
@@ -1877,7 +1817,6 @@ begin
   ShowDeckStats();
   SetDeckChanged(False);
 end;
-
 
 
 procedure TMainForm.ButtonSaveDeckAsClick(Sender: TObject);
@@ -1918,13 +1857,15 @@ begin
   end;
 end;
 
+
+// Resets the deck editor interface, disabling controls etc
 procedure TMainForm.ResetCardEditor();
 begin
   PanelCardCover.Visible := True;
   PanelCardFields.Visible := False;
   ComboCardList.Items.Clear();
   ButtonSaveCard.Enabled := False;
-  ButtonSaveAsNewCard.Enabled := False;
+  ButtonSaveCardAs.Enabled := False;
   ButtonDeleteCard.Enabled := False;
   ButtonPreviewCard.Enabled := False;
   ButtonSavePicture.Enabled := False;
@@ -1934,6 +1875,7 @@ begin
 end;
 
 
+// Resets the site editor interface
 procedure TMainForm.ResetSiteEditor();
 begin
   PanelSiteFields.Visible := False;
@@ -1949,6 +1891,7 @@ begin
 end;
 
 
+// Resets the card editor interface
 procedure TMainForm.ResetDeckEditor();
 begin
   IgnoreDeckChanges := True;
@@ -1976,8 +1919,6 @@ begin
   IgnoreDeckChanges := False;
   IsDeckChanged := False;
 end;
-
-
 
 
 // Populates the card grid with card items
@@ -2053,6 +1994,7 @@ begin
 end;
 
 
+// Populates the ListDeckAllCards with card items
 procedure TMainForm.PopulateListDeckAllCards();
 var I: Integer;
     Card: TCard;
@@ -2073,7 +2015,7 @@ begin
 end;
 
 
-
+// Populates the ListDeckCards with card items
 procedure TMainForm.PopulateListDeckCards();
 var I: Integer;
     Card: TDeckCard;
@@ -2098,7 +2040,7 @@ begin
 end;
 
 
-
+// Populates the ListDeckAllSites with sites
 procedure TMainForm.PopulateListDeckAllSites();
 var I: Integer;
     Site: TSite;
@@ -2117,7 +2059,7 @@ begin
 end;
 
 
-
+// Populates the ListDeckSites with sites
 procedure TMainForm.PopulateListDeckSites();
 var I: Integer;
     Site: TDeckSite;
@@ -2138,7 +2080,6 @@ begin
     ListDeckSites.CustomSort(nil, 0);
   end;
 end;
-
 
 
 procedure TMainForm.AnyCardListColumnClick(Sender: TObject;
@@ -2162,6 +2103,7 @@ begin
   end;
 end;
 
+
 procedure TMainForm.AnyCardListCompare(Sender: TObject; Item1,
   Item2: TListItem; Data: Integer; var Compare: Integer);
 var Card1, Card2: TCard;
@@ -2177,7 +2119,7 @@ begin
     SortInfo := ListDeckCardsSortInfo
   else begin
     SortInfo := nil;
-    ShowMessage('Shit, fatal error: the sender ' + Sender.ClassName + ' is an unknown list.');
+    ShowMessage('Fatal error: the sender ' + Sender.ClassName + ' is an unknown list.');
   end;
   IsNumberSort := False;
   if (Sender = ListDeckCards) then begin
@@ -2259,7 +2201,7 @@ begin
 end;
 
 
-
+// Resets the card list page, disabling filters etc
 procedure TMainForm.ResetCardList();
 begin
   ListCardsFilterRace := '';
@@ -2282,9 +2224,6 @@ begin
   PopulateListCards();
   ButtonClearListFilter.Enabled := False;
 end;
-
-
-
 
 
 procedure TMainForm.AnyCardListKeyUp(Sender: TObject; var Key: Word;
@@ -2317,6 +2256,7 @@ end;
 procedure TMainForm.AnyCardListDblClick(Sender: TObject);
 var ListItem: TListItem;
     Card: TCard;
+    PreviousActivePage: TTabsheet;
 begin
   if (Sender is TListView) then begin
     ListItem := TListView(Sender).ItemFocused;
@@ -2325,12 +2265,14 @@ begin
         Card := TDeckCard(ListItem.Data).Card
       else
         Card := ListItem.Data;
-      if (Card = CurrentCard) then
-        PageControl.ActivePage := PageCardEditor
-      else if (GetCheckSavingResult(True, False, False) <> mrCancel) then begin
-        CurrentCard := Card;
-        PageControl.ActivePage := PageCardEditor;
-        LoadCard(CurrentCard);
+      PreviousActivePage := PageControl.ActivePage;
+      PageControl.ActivePage := PageCardEditor;
+      if (Card <> CurrentCard) then begin
+        if (GetCheckSavingResult(True, False, False) <> mrCancel) then begin
+          CurrentCard := Card;
+          LoadCard(CurrentCard);
+        end else
+          PageControl.ActivePage := PreviousActivePage;
       end;
     end;
   end;
@@ -2347,6 +2289,7 @@ begin
     Accept := False;
 end;
 
+
 procedure TMainForm.ListDeckCardsDragDrop(Sender, Source: TObject; X,
   Y: Integer);
 var ListItem: TListItem;
@@ -2359,10 +2302,12 @@ begin
   end;
 end;
 
+
 procedure TMainForm.Viewcard1Click(Sender: TObject);
 begin
   AnyCardListDblClick(ListDeckCards);
 end;
+
 
 procedure TMainForm.ListDecksDblClick(Sender: TObject);
 var ListItem: TListItem;
@@ -2379,6 +2324,7 @@ begin
     end;
   end;
 end;
+
 
 procedure TMainForm.ListDecksKeyUp(Sender: TObject; var Key: Word;
   Shift: TShiftState);
@@ -2406,6 +2352,7 @@ begin
   end;
 end;
 
+
 procedure TMainForm.ButtonNewSiteClick(Sender: TObject);
 begin
   if (GetCheckSavingResult(False, False, True) <> mrCancel) then begin
@@ -2420,6 +2367,7 @@ begin
     EditSiteTitle.SetFocus();
   end;
 end;
+
 
 procedure TMainForm.ButtonPreviewSiteClick(Sender: TObject);
 begin
@@ -2459,8 +2407,23 @@ begin
                   'as a site with that name already exists.');
       NewSite.Free();
     end else begin
+      EditSiteTitle.Text := Temp;
+      // Copy over content picture
+      if CurrentSite.ContentPicture <> nil then begin
+        NewSite.ContentPicture := TPicture.Create();
+        NewSite.ContentPicture.Bitmap.Assign(CurrentSite.ContentPicture);
+      end;
+      if (CurrentSite.OriginalContentPicture <> nil) then begin
+        // Site picture has been changed, but is being saved under a different
+        // name - restore the original site's condition.
+        FreeAndNil(CurrentSite.ContentPicture);
+        CurrentSite.ContentPicture := CurrentSite.OriginalContentPicture;
+        CurrentSite.OriginalContentPicture := nil;
+      end;
+
       CurrentSite := NewSite;
       SaveCurrentSite();
+      PreviewSite(CurrentSite);
     end;
   end;
 end;
@@ -2479,6 +2442,7 @@ begin
   PreviewSite(CurrentSite);
   SetSiteChanged(False);
 end;
+
 
 procedure TMainForm.ButtonDeleteSiteClick(Sender: TObject);
 var
@@ -2511,10 +2475,13 @@ begin
   end;
 end;
 
+
 procedure TMainForm.EditSiteChange(Sender: TObject);
 begin
   SetSiteChanged(True);
+  PreviewSite(CurrentSite, False);
 end;
+
 
 procedure TMainForm.ListDeckSitesDragOver(Sender, Source: TObject; X,
   Y: Integer; State: TDragState; var Accept: Boolean);
@@ -2525,6 +2492,7 @@ begin
   else
     Accept := False;
 end;
+
 
 procedure TMainForm.AddSiteToDeck(Sender: TObject);
 var ListItem: TListItem;
@@ -2544,17 +2512,20 @@ begin
   end;
 end;
 
+
 procedure TMainForm.ListDeckSitesDragDrop(Sender, Source: TObject; X,
   Y: Integer);
 begin
   AddSiteToDeck(Sender);
 end;
 
+
 procedure TMainForm.ListDeckAllSitesDragDrop(Sender, Source: TObject; X,
   Y: Integer);
 begin
   RemoveSiteFromDeck(Sender);
 end;
+
 
 procedure TMainForm.RemoveSiteFromDeck(Sender: TObject);
 var Site: TDeckSite;
@@ -2569,9 +2540,11 @@ begin
   end;
 end;
 
+
 procedure TMainForm.AnySiteListDblClick(Sender: TObject);
 var ListItem: TListItem;
     Site: TSite;
+    PreviousActivePage: TTabSheet;
 begin
   if (Sender is TListView) then begin
     ListItem := TListView(Sender).ItemFocused;
@@ -2580,12 +2553,14 @@ begin
         Site := TDeckSite(ListItem.Data).Site
       else
         Site := ListItem.Data;
-      if (Site = CurrentSite) then
-        PageControl.ActivePage := PageSiteEditor
-      else if (GetCheckSavingResult(False, False, True) <> mrCancel) then begin
-        CurrentSite := Site;
-        PageControl.ActivePage := PageSiteEditor;
-        LoadSite(CurrentSite);
+      PreviousActivePage := PageControl.ActivePage;
+      PageControl.ActivePage := PageSiteEditor;
+      if (Site <> CurrentSite) then begin
+        if (GetCheckSavingResult(False, False, True) <> mrCancel) then begin
+          CurrentSite := Site;
+          LoadSite(CurrentSite);
+        end else
+          PageControl.ActivePage := PreviousActivePage;
       end;
     end;
   end;
@@ -2608,6 +2583,7 @@ begin
   end;
 end;
 
+
 procedure TMainForm.AnySiteListCompare(Sender: TObject; Item1,
   Item2: TListItem; Data: Integer; var Compare: Integer);
 var Site1, Site2: TSite;
@@ -2621,7 +2597,7 @@ begin
     SortInfo := ListDeckAllSitesSortInfo
   else begin
     SortInfo := nil;
-    ShowMessage('Shit, fatal error: the sender ' + Sender.ClassName + ' is an unknown list.');
+    ShowMessage('Fatal error: the sender ' + Sender.ClassName + ' is an unknown list.');
   end;
   IsNumberSort := False;
   if (Sender = ListDeckSites) then begin
@@ -2664,106 +2640,26 @@ begin
 end;
 
 
-procedure TMainForm.SaveCurrentCardImage(Filename: String);
-var
-  BMP: TBitmap;
-  JPG: TJPEGImage;
-  PNG: TPNGObject;
-  FileExtension: String;
-begin
-  BMP := nil;
-  JPG := nil;
-  PNG := nil;
-  try
-    BMP := GetCurrentCardImage();
-    FileExtension := LowerCase(ExtractFileExt(Filename));
-    if '.jpg' = FileExtension then begin
-      JPG := TJPEGImage.Create();
-      JPG.Assign(BMP);
-      JPG.SaveToFile(Filename);
-    end else if '.png' = FileExtension then begin
-      PNG := TPNGObject.Create();
-      PNG.Assign(BMP);
-      PNG.SaveToFile(Filename);
-    end else begin
-      BMP.SaveToFile(Filename);
-    end;
-  finally
-    BMP.Free();
-    JPG.Free();
-    PNG.Free();
-  end;
-end;
-
-
+// Returns the screen image of the current card
 function TMainForm.GetCurrentCardImage(): TBitmap;
 begin
-  Result := CaptureRect(Bounds(CARD_IMAGE_LEFT, CARD_IMAGE_TOP,
-                               CARD_IMAGE_WIDTH, CARD_IMAGE_HEIGHT));
+  Result := Imager.CaptureRect(Bounds(CARD_IMAGE_LEFT, CARD_IMAGE_TOP,
+                                      CARD_IMAGE_WIDTH, CARD_IMAGE_HEIGHT));
 end;
-
-
-procedure TMainForm.SaveCurrentSiteImage(Filename: String);
-var
-  BMP: TBitmap;
-  JPG: TJPEGImage;
-  PNG: TPNGObject;
-  FileExtension: String;
-begin
-  BMP := nil;
-  JPG := nil;
-  PNG := nil;
-  try
-    BMP := CaptureRect(Bounds(SITE_IMAGE_LEFT, SITE_IMAGE_TOP,
-                              SITE_IMAGE_WIDTH, SITE_IMAGE_HEIGHT));
-    FileExtension := LowerCase(ExtractFileExt(Filename));
-    if '.jpg' = FileExtension then begin
-      JPG := TJPEGImage.Create();
-      JPG.Assign(BMP);
-      JPG.SaveToFile(Filename);
-    end else if '.png' = FileExtension then begin
-      PNG := TPNGObject.Create();
-      PNG.Assign(BMP);
-      PNG.SaveToFile(Filename);
-    end else begin
-      BMP.SaveToFile(Filename);
-    end;
-  finally
-    BMP.Free();
-    JPG.Free();
-    PNG.Free();
-  end;
-end;
-
-
-
-function TMainForm.CaptureRect(Area: TRect): TBitmap;
-var
-  hdcSrc : THandle;
-begin
-  Result := TBitmap.Create();
-  try
-    hdcSrc := GetWindowDC(GetForeGroundWindow);
-    Result.Width  := Area.Right - Area.Left;
-    Result.Height := Area.Bottom - Area.Top;
-    StretchBlt(Result.Canvas.Handle, 0, 0, Result.Width,
-               Result.Height, hdcSrc, Area.Left, Area.Top,
-               Result.Width, Result.Height, SRCCOPY);
-  finally
-    ReleaseDC(0, hdcSrc);
-  end;
-end;
-
 
 
 procedure TMainForm.ButtonSaveSitePictureClick(Sender: TObject);
-var Filename: String;
+var
+  Filename: String;
+  Bitmap: TBitmap;
 begin
    SaveImageDialog.Filename := CurrentSite.GetShowName();
    if (SaveImageDialog.Execute()) then begin
      Application.ProcessMessages();
      Filename := SaveImageDialog.Filename;
-     SaveCurrentSiteImage(Filename);
+     Bitmap := Imager.CaptureRect(Bounds(SITE_IMAGE_LEFT, SITE_IMAGE_TOP,
+                                         SITE_IMAGE_WIDTH, SITE_IMAGE_HEIGHT));
+     Imager.SavePictureToDisk(Bitmap, Filename);
    end;
 end;
 
@@ -2805,18 +2701,23 @@ begin
   end;
 end;
 
+
 procedure TMainForm.CardThumbnailClick(Sender: TObject);
+var PreviousActivePage: TTabSheet;
 begin
   if (PreviewedCard <> nil) then begin
-    if (PreviewedCard = CurrentCard) then
-      PageControl.ActivePage := PageCardEditor
-    else if (GetCheckSavingResult(True, False, False) <> mrCancel) then begin
-      CurrentCard := PreviewedCard;
-      PageControl.ActivePage := PageCardEditor;
-      LoadCard(CurrentCard);
+    PreviousActivePage := PageControl.ActivePage;
+    PageControl.ActivePage := PageCardEditor;
+    if (PreviewedCard <> CurrentCard) then begin
+      if (GetCheckSavingResult(True, False, False) <> mrCancel) then begin
+        CurrentCard := PreviewedCard;
+        LoadCard(CurrentCard);
+      end else
+        PageControl.ActivePage := PreviousActivePage;
     end;
   end;
 end;
+
 
 procedure TMainForm.ButtonChooseDBClick(Sender: TObject);
 var
@@ -2835,7 +2736,6 @@ begin
       end;
       if Filename <> '' then begin
         Application.ProcessMessages(); // Allow dialog time to close
-        Database.Disconnect();
         DataLists := TList.Create();
         DataLists.Add(Cards); DataLists.Add(Sites); DataLists.Add(Decks);
         DataLists.Add(Races);
@@ -2846,18 +2746,19 @@ begin
           TList(DataLists.Items[I]).Clear();
         end;
         DataLists.Free();
-        OpenDatabase(Filename);
+        FreeAndNil(Database);
+        Database := TPersistence.Create(Filename);
       end;
     end;
   end;
 end;
 
 
+// Loads a picture for the current card, either file file or URL
 procedure TMainForm.LoadCardPicture(Location, LocationType: String);
 var
   Picture: TPicture;
   ResizeRatioX, ResizeRatioY: Single;
-  Info: TResizeInfo;
   IsError: Boolean;
 begin
   if AnsiIndexText(LocationType, ['URL', 'file']) = -1 then
@@ -2893,18 +2794,12 @@ begin
        ResizeRatioY := Picture.Height / CARD_CONTENT_PICTURE_MAX_HEIGHT;
        ContentPicture.Picture.Bitmap.Height := CARD_CONTENT_PICTURE_MAX_HEIGHT;
      end;
-     EditPictureFilename.Text := ExtractFileNameBetter(Location);
+     EditPictureFilename.Text := UrlDecode(ExtractFileNameBetter(Location));
      SetCardChanged(True);
      if (ResizeRatioX <> 1) or (ResizeRatioY <> 1) then begin
-       ResizerSection.Enter();
-       Info := TResizeInfo.Create(CurrentCard, rsContent);
-       PendingResizesMap.AddItem(IntToStr(ResizerIDCounter), Info);
-       TResizerThread.Create(ResizerIDCounter, Picture.Bitmap,
-                            Ceil(Picture.Width / Min(ResizeRatioX, ResizeRatioY)),
-                            Ceil(Picture.Height / Min(ResizeRatioX, ResizeRatioY)),
-                            ResizerThreadCallback);
-       Inc(ResizerIDCounter);
-       ResizerSection.Leave();
+       Imager.QueueResize(Picture.Bitmap, Ceil(Picture.Width / Min(ResizeRatioX, ResizeRatioY)),
+                          Ceil(Picture.Height / Min(ResizeRatioX, ResizeRatioY)),
+                          CurrentCard, rsContent, ResizeCallback);
      end;
   end else if not IsError then begin
     MessageDlg('Failed to load a picture from ' + LocationType + ' "' + Location + '".', mtWarning, [mbOK], 0);
@@ -2912,12 +2807,13 @@ begin
 end;
 
 
+// Loads a picture for the current site, either file file or URL
 procedure TMainForm.LoadSitePicture(Location, LocationType: String);
 var
   Picture: TPicture;
   ResizeRatioX, ResizeRatioY: Single;
-  Info: TResizeInfo;
 begin
+  Picture := nil;
   if AnsiIndexText(LocationType, ['URL', 'file']) = -1 then
     raise Exception('Unknown location type "' + LocationType + '" for site picture "' + Location + '"');
 
@@ -2948,18 +2844,12 @@ begin
        ResizeRatioY := Picture.Height / SITE_CONTENT_PICTURE_MAX_HEIGHT;
        SiteContentPicture.Picture.Bitmap.Height := SITE_CONTENT_PICTURE_MAX_HEIGHT;
      end;
-     EditSitePictureFilename.Text := ExtractFileNameBetter(Location);
+     EditSitePictureFilename.Text := UrlDecode(ExtractFileNameBetter(Location));
      SetSiteChanged(True);
      if (ResizeRatioX <> 1) or (ResizeRatioY <> 1) then begin
-       ResizerSection.Enter();
-       Info := TResizeInfo.Create(CurrentSite, rsContent);
-       PendingResizesMap.AddItem(IntToStr(ResizerIDCounter), Info);
-       TResizerThread.Create(ResizerIDCounter, Picture.Bitmap,
-                            Ceil(Picture.Width / Min(ResizeRatioX, ResizeRatioY)),
-                            Ceil(Picture.Height / Min(ResizeRatioX, ResizeRatioY)),
-                            ResizerThreadCallback);
-       Inc(ResizerIDCounter);
-       ResizerSection.Leave();
+       Imager.QueueResize(Picture.Bitmap, Ceil(Picture.Width / Min(ResizeRatioX, ResizeRatioY)),
+                          Ceil(Picture.Height / Min(ResizeRatioX, ResizeRatioY)),
+                          CurrentSite, rsContent, ResizeCallback);
      end;
   end else begin
     MessageDlg('Failed to load a picture from ' + LocationType + ' "' + Location + '".', mtWarning, [mbOK], 0);
@@ -3011,15 +2901,17 @@ begin
 end;
 
 
+// Updates the database information (name, size, cards count) on first page
 procedure TMainForm.UpdateDatabaseInfo();
 begin
   InfoDatabaseNameLabel.Caption := Database.Filename;
-  InfoDatabaseSizeLabel.Caption := FormatByteSize(Database.FileSize);
+  InfoDatabaseSizeLabel.Caption := FormatByteSize(Database.GetSize());
   InfoDatabaseCardsLabel.Caption := IntToStr(Cards.Count);
   InfoDatabaseSitesLabel.Caption := IntToStr(Sites.Count);
   InfoDatabaseDecksLabel.Caption := IntToStr(Decks.Count);
   InfoDatabaseCreatedLabel.Caption := GetSetting('DatabaseCreated');
 end;
+
 
 procedure TMainForm.FormShow(Sender: TObject);
 begin
@@ -3027,11 +2919,11 @@ begin
 end;
 
 
+// Creates the new card dialog form
 procedure TMainForm.CreateNewCardDialog();
 var LabelComboRace: TLabel;
     LabelComboCardType: TLabel;
     I: Integer;
-    DialogResult: Integer;
 begin
   NewCardDialog := CreateMessageDialog('', mtCustom, [mbOK, mbCancel]);
   NewCardDialog.Height := 149; NewCardDialog.Width := 228;
@@ -3065,10 +2957,17 @@ begin
   LabelComboCardType.Left := 32; LabelComboCardType.Top := 48;
 end;
 
+
 procedure TMainForm.LOTWCardsPictureClick(Sender: TObject);
 begin
   PageControl.ActivePage := PageCardList;
+  if (ListCards.ItemIndex < 0) and (ListCards.Items.Count > 0) then begin
+    ListCards.Selected := ListCards.Items[0];
+    ListCards.ItemFocused := ListCards.Items[0];
+    ListCards.SetFocus();
+  end;
 end;
+
 
 procedure TMainForm.LOTWSitesPictureClick(Sender: TObject);
 begin
@@ -3076,10 +2975,12 @@ begin
   ComboSiteList.SetFocus();
 end;
 
+
 procedure TMainForm.LOTWDecksPictureClick(Sender: TObject);
 begin
   PageControl.ActivePage := PageDeckEditor;
 end;
+
 
 procedure TMainForm.ListDecksCompare(Sender: TObject; Item1,
   Item2: TListItem; Data: Integer; var Compare: Integer);
@@ -3123,6 +3024,7 @@ begin
   if (SortInfo.IsSortReversed) then
     Compare := 0 - Compare;
 end;
+
 
 procedure TMainForm.ListDecksColumnClick(Sender: TObject;
   Column: TListColumn);

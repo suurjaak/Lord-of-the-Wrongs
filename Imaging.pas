@@ -3,43 +3,41 @@
  *
  * @author    Erki Suurjaak
  * @created   02.01.2004
- * @modified  02.11.2011
+ * @modified  04.11.2011
  *)
 unit Imaging;
 
 interface
 
-uses Windows, ElHashList, graphics, dialogs, SysUtils, classes, GR32, DataClasses;
+uses Windows, ElHashList, graphics, dialogs, SysUtils, classes, GR32,
+     DataClasses, SyncObjs;
 
 type
-  TResizerThreadCallback = procedure(ID: Integer; Resized: TBitmap) of object;
-
   TResizeType = (rsThumbnail, rsContent);
 
-  TResizeInfo = class(TObject)
-  public
-    Item: TDataClass;
-    ResizeType: TResizeType;
-    constructor Create(Item: TDataClass; ResizeType: TResizeType);
-  end;
+  TResizeCallback = procedure(Resized: TBitmap; ResizeType: TResizeType; Item: TDataClass) of object;
 
   // Thread object that resizes a picture in the background, leaving GUI
   // responsive. Executes immediately on creation, callback is called with
   // the resulting resized image.
-  TResizerThread = class(TThread)
+  TResizeThread = class(TThread)
   private
     ID: Integer;
     Original: TBitmap32;
     Resized: TBitmap;
-    Callback: TResizerThreadCallback;
-    ResizedWidth: Integer;
-    ResizedHeight: Integer;
+    Width: Integer;
+    Height: Integer;
+    Item: TDataClass;
+    ResizeType: TResizeType;
+    Callback: TResizeCallback;
     // Sets the finished resized picture into the data object.
     procedure OnCompletion();
   protected
     procedure Execute(); override;
   public
-    constructor Create(ID: Integer; Source: TBitmap; Width, Height: Integer; Callback: TResizerThreadCallback);
+    constructor Create(ID: Integer; Original: TBitmap; Width, Height: Integer;
+                       Item: TDataClass; ResizeType: TResizeType;
+                       Callback: TResizeCallback);
     destructor Destroy(); override;
   end;
 
@@ -47,22 +45,40 @@ type
   TImaging = class(TObject)
   private
     Cache: TElHashList;
+    PendingResizeMap: TElHashList;
+    ResizeIDCounter: Integer;
+    ResizeSection: TCriticalSection;
+    // Encodes spaces in the URL
+    function EncodeURLSpaces(URL: string): string;
   public
     constructor Create();
     destructor Destroy(); override;
     // Returns an image resource by the specified name. Image resources
     // are kept in images.res and embedded into the application on compilation.
-    // Optional FileType argument can specify the resource type, e.g. 'png'.
-    function GetResource(Name: String; FileType: String = ''): TPicture;
+    // Filename argument is used for specifying content type, can
+    // be whole filename or just extension, e.g. '.png'|'.bmp'|'.jpg'
+    function GetResource(Name: String; Filename: String): TPicture;
     // Loads the picture from the local disk.
-    function LoadPictureFromDisk(FileName: String): TPicture;
+    function LoadPictureFromDisk(Filename: String): TPicture;
     // Loads the picture from the opened stream (bmp/jpg/png/gif).
-    function LoadPictureFromStream(Stream: TStream; FileName: String): TPicture;
+    // Filename argument is used for specifying content type, can
+    // be whole filename or just extension, e.g. '.png'|'.bmp'|'.jpg'
+    function LoadPictureFromStream(Stream: TStream; Filename: String): TPicture;
     // Loads the picture at the specified URL and returns it.
     // The URL should be URL-encoded.
     function LoadPictureFromURL(URL: String): TPicture;
-    // Clears the cache
-    procedure Clear();
+    // Saves the picture into the specified file. BMP, JPG and PNG
+    // formats are supported.
+    procedure SavePictureToDisk(Bitmap: TBitmap; Filename: String);
+    // Saves the picture into the specified stream,
+    // in the format specified in the filename.
+    procedure SavePictureToStream(Bitmap: TBitmap; Stream: TStream; Filename: String);
+    // Captures a rectangle from the current application window.
+    function CaptureRect(Area: TRect): TBitmap;
+    // Queues the picture for resizing in a background thread.
+    procedure QueueResize(Bitmap: TBitmap; Width, Height: Integer;
+                          Item: TDataClass; ResizeType: TResizeType;
+                          Callback: TResizeCallback);
   end;
 
 
@@ -71,48 +87,43 @@ implementation
 
 uses jpeg, Globals, HttpProt, pngimage, GR32_Resamplers, axctrls, main, ExtCtrls;
 
-type
-  PRGBTripleArray = ^TRGBTripleArray;
-  TRGBTripleArray = array[0..4096 - 1] of TRGBTriple;
-
-constructor TResizeInfo.Create(Item: TDataClass; ResizeType: TResizeType);
-begin
-  Self.Item := Item;
-  Self.ResizeType := ResizeType;
-end;
 
 
-constructor TResizerThread.Create(ID: Integer; Source: TBitmap; Width, Height: Integer; Callback: TResizerThreadCallback);
+
+constructor TResizeThread.Create(ID: Integer; Original: TBitmap; Width, Height: Integer;
+                                 Item: TDataClass; ResizeType: TResizeType;
+                                 Callback: TResizeCallback);
 begin
   inherited Create(False);
   Self.FreeOnTerminate := True;
   Self.ID := ID;
   Self.Original := TBitmap32.Create();
-  Self.Original.Assign(Source);
-  Self.ResizedWidth := Width;
-  Self.ResizedHeight := Height;
+  Self.Original.Assign(Original);
+  Self.Width := Width;
+  Self.Height := Height;
+  Self.Item := Item;
+  Self.ResizeType := ResizeType;
   Self.Callback := Callback;
 end;
 
 
-destructor TResizerThread.Destroy();
-var I: Integer;
+destructor TResizeThread.Destroy();
 begin
   Original.Free();
   Resized.Free();
 end;
 
 
-procedure TResizerThread.Execute();
+procedure TResizeThread.Execute();
 var
   Resampler: TDraftResampler;
   Resized32: TBitmap32;
 begin
   Resized32 := TBitmap32.Create();
-  Resized32.SetSize(ResizedWidth, ResizedHeight);
-  Resampler := TDraftResampler.Create();
+  Resized32.SetSize(Width, Height);
+  Resampler := TDraftResampler.Create(); // For some reason, must not be freed
   Original.Resampler := Resampler;
-  Resized32.Draw(Bounds(0, 0, ResizedWidth, ResizedHeight),
+  Resized32.Draw(Bounds(0, 0, Width, Height),
                  Bounds(0, 0, Original.Width, Original.Height),
                  Original);
   Resized := TBitmap.Create();
@@ -122,19 +133,36 @@ begin
 end;
 
 
-procedure TResizerThread.OnCompletion();
+// Sets the finished resized picture into the data object.
+procedure TResizeThread.OnCompletion();
 begin
-  Callback(ID, Resized);
+   Callback(Resized, ResizeType, Item);
 end;
 
 
 constructor TImaging.Create();
 begin
   Cache := TElHashList.Create();
+  PendingResizeMap := TElHashList.Create();
+  ResizeSection := TCriticalSection.Create();
+  ResizeIDCounter := 0;
 end;
 
 
-function TImaging.GetResource(Name: String; FileType: String = ''): TPicture;
+destructor TImaging.Destroy();
+begin
+  Cache.Clear();
+  Cache.Free();
+  PendingResizeMap.Free();
+  ResizeSection.Free();
+end;
+
+
+// Returns an image resource by the specified name. Image resources
+// are kept in images.res and embedded into the application on compilation.
+// Filename argument is used for specifying content type, can
+// be whole filename or just extension, e.g. '.png'|'.bmp'|'.jpg'
+function TImaging.GetResource(Name: String; Filename: String): TPicture;
 var
   CacheID: String;
   RStream: TResourceStream;
@@ -143,20 +171,20 @@ begin
   Result := Cache.Item[CacheID];
   if (Result = nil) then begin
     RStream := TResourceStream.Create(hInstance, Name, RT_RCDATA);
-    if (ExtractFileExt(Name) = '') and (FileType <> '') then
-      Name := Name + '.' + FileType;
-    Result := LoadPictureFromStream(RStream, Name);
+    Result := LoadPictureFromStream(RStream, Filename);
     RStream.Free();
     Cache.AddItem(CacheID, Result);
   end;
 end;
 
 
-function TImaging.LoadPictureFromStream(Stream: TStream; FileName: String): TPicture;
+// Loads the picture from the opened stream (bmp/jpg/png/gif).
+// Filename argument is used for specifying content type, can
+// be whole filename or just extension, e.g. '.png'|'.bmp'|'.jpg'
+function TImaging.LoadPictureFromStream(Stream: TStream; Filename: String): TPicture;
 var
   Graphic: TGraphic;
   FileExtension: String;
-  HTTP: THTTPCli;
   PNG: TPNGObject;
   BMP: TBitmap;
   BMP32: TBitmap32;
@@ -167,7 +195,6 @@ var
   AlphaPtr: PByte;
 begin
   Result := nil;
-  Graphic := nil;
   Stream.Position := 0;
   FileExtension := LowerCase(ExtractFileExt(FileName));
   if (FileExtension = '.bmp') then begin
@@ -239,6 +266,9 @@ begin
 
 
       { Did not come into use, but retaining just in case.
+      type
+        PRGBTripleArray = ^TRGBTripleArray;
+        TRGBTripleArray = array[0..4096 - 1] of TRGBTriple;
       var
         Clr, NewClr: TColor;
         RGBArray: PRGBTripleArray;
@@ -284,18 +314,19 @@ begin
 end;
 
 
+// Loads the picture at the specified URL and returns it.
+// The URL should be URL-encoded.
 function TImaging.LoadPictureFromURL(URL: String): TPicture;
-var FileType: String;
-    HTTP: THTTPCli;
+var HTTP: THTTPCli;
     Stream: TMemoryStream;
     ErrorMessage: String;
 begin
+  Stream := TMemoryStream.Create();
+  HTTP := THTTPCli.Create(nil);
+  HTTP.URL := EncodeURLSpaces(URL);
+  HTTP.NoCache := True;
+  HTTP.RcvdStream := Stream;
   try
-    Stream := TMemoryStream.Create();
-    HTTP := THTTPCli.Create(nil);
-    HTTP.URL := URL;
-    HTTP.NoCache := True;
-    HTTP.RcvdStream := Stream;
     HTTP.Get();
   except
     on EHttpException do begin
@@ -318,6 +349,7 @@ begin
 end;
 
 
+// Loads the picture from the local disk.
 function TImaging.LoadPictureFromDisk(FileName: String): TPicture;
 var FStream: TFileStream;
 begin
@@ -330,17 +362,89 @@ begin
 end;
 
 
-destructor TImaging.Destroy();
+
+// Encodes spaces in the URL
+function TImaging.EncodeURLSpaces(URL: string): string;
 begin
-  Cache.Clear();
-  Cache.Free();
+  Result := StringReplace(URL, ' ', '%20', [rfReplaceAll]);
 end;
 
 
-procedure TImaging.Clear();
+// Captures a rectangle from the current application window.
+function TImaging.CaptureRect(Area: TRect): TBitmap;
+var
+  hdcSrc : THandle;
 begin
-  Cache.Clear();
+  hdcSrc := GetWindowDC(GetForeGroundWindow);
+  try
+    Result := TBitmap.Create();
+    Result.Width  := Area.Right - Area.Left;
+    Result.Height := Area.Bottom - Area.Top;
+    StretchBlt(Result.Canvas.Handle, 0, 0, Result.Width,
+               Result.Height, hdcSrc, Area.Left, Area.Top,
+               Result.Width, Result.Height, SRCCOPY);
+  finally
+    ReleaseDC(0, hdcSrc);
+  end;
 end;
 
+
+// Saves the picture into the specified stream,
+// in the format specified in the filename. BMP, JPG and PNG
+// formats are supported.
+procedure TImaging.SavePictureToStream(Bitmap: TBitmap; Stream: TStream; Filename: String);
+var
+  JPG: TJPEGImage;
+  PNG: TPNGObject;
+  FileExtension: String;
+begin
+  JPG := nil;
+  PNG := nil;
+  FileExtension := LowerCase(ExtractFileExt(Filename));
+
+  try
+    if ('.jpg' = FileExtension) or ('.jpeg' = FileExtension) then begin
+      JPG := TJPEGImage.Create();
+      JPG.Assign(Bitmap);
+      JPG.SaveToStream(Stream);
+    end else if '.png' = FileExtension then begin
+      PNG := TPNGObject.Create();
+      PNG.Assign(Bitmap);
+      PNG.SaveToStream(Stream);
+    end else begin
+      Bitmap.SaveToStream(Stream);
+    end;
+  finally
+    JPG.Free();
+    PNG.Free();
+  end;
+end;
+
+// Saves the picture into the specified file. BMP, JPG and PNG
+// formats are supported.
+procedure TImaging.SavePictureToDisk(Bitmap: TBitmap; Filename: String);
+var
+  FileStream: TFileStream;
+begin
+  FileStream := nil;
+  try
+    FileStream := TFileStream.Create(Filename, fmCreate);
+    SavePictureToStream(Bitmap, FileStream, Filename);
+  finally
+    FileStream.Free();
+  end;
+end;
+
+
+// Queues the picture for resizing in a background thread.
+procedure TImaging.QueueResize(Bitmap: TBitmap; Width, Height: Integer;
+                                      Item: TDataClass; ResizeType: TResizeType;
+                                      Callback: TResizeCallback);
+begin
+  ResizeSection.Enter();
+  TResizeThread.Create(ResizeIDCounter, Bitmap, Width, Height, Item, ResizeType, Callback);
+  Inc(ResizeIDCounter);
+  ResizeSection.Leave();
+end;
 
 end.

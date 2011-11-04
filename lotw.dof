@@ -76,9 +76,9 @@ LocaleToUnicode=1
 ImagebaseMultiple=1
 SuspiciousTypecast=1
 PrivatePropAccessor=1
-UnsafeType=1
+UnsafeType=0
 UnsafeCode=1
-UnsafeCast=1
+UnsafeCast=0
 [Linker]
 MapFile=0
 OutputObjs=0
@@ -114,7 +114,7 @@ IncludeVerInfo=1
 AutoIncBuild=1
 MajorVer=1
 MinorVer=0
-Release=0
+Release=1
 Build=43
 Debug=0
 PreRelease=0
@@ -126,16 +126,14 @@ CodePage=1257
 [Version Info Keys]
 CompanyName=Erki Suurjaak
 FileDescription=The Lord of The Wrongs card and deck creator
-FileVersion=1.0.0.43
+FileVersion=1.0.1.43
 InternalName=lotw.exe
 LegalCopyright=Created by Erki Suurjaak.
 LegalTrademarks=A parody of the Lord of the Rings trading card game, property of Decipher Inc. It uses the backgrounds of the original game and takes its logic and rules from there as well.
 OriginalFilename=lotw.exe
 ProductName=The Lord of the Wrongs
-ProductVersion=1.0.0.43
+ProductVersion=1.0.1.43
 Comments=
-[Excluded Packages]
-C:\Program Files\Borland\Delphi7\Projects\Bpl\ASG_Capture.bpl=ASG Screen Capture
 [HistoryLists\hlUnitAliases]
 Count=1
 Item0=WinTypes=Windows;WinProcs=Windows;DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE;
