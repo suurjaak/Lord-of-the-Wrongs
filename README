@@ -1,8 +1,8 @@
-Lord of the Wrongs is a parody of the Lord of the Rings trading card game
-(created by a company called Decipher Inc., discontinued by now). The
-Fellowship characters can be you and your friends, the Shadow races consist
-of various kinds of alcohol, and the objective is to survive the damage
-from late afternoon to early morning.
+Lord of the Wrongs is a card creator application written in Delphi, a parody
+of the Lord of the Rings trading card game (created by a company called
+Decipher Inc., discontinued by now). The Fellowship characters can be you and
+your friends, the Shadow races consist of various kinds of alcohol, and the
+objective is to survive the damage from late afternoon to early morning.
 
 Currently there are 4 defined races: Fellowship, Soft Drink, Medium Drink,
 Strong Drink. The races and their images can be changed in the database

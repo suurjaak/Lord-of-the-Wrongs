@@ -2736,6 +2736,7 @@ begin
       end;
       if Filename <> '' then begin
         Application.ProcessMessages(); // Allow dialog time to close
+        // Free old data
         DataLists := TList.Create();
         DataLists.Add(Cards); DataLists.Add(Sites); DataLists.Add(Decks);
         DataLists.Add(Races);
@@ -2747,7 +2748,7 @@ begin
         end;
         DataLists.Free();
         FreeAndNil(Database);
-        Database := TPersistence.Create(Filename);
+        OpenDatabase(Filename);
       end;
     end;
   end;
