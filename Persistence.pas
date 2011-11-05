@@ -115,7 +115,6 @@ procedure TPersistence.BindParameters(Stmt: sqlite3_stmt_ptr; const Parameters: 
 var
   I: Integer;
   ParametersTyped: array[0..$FFF0 div SizeOf(TVarRec)] of TVarRec absolute Parameters;
-  Len: Integer;
   Stream: ^TStringStream;
 begin
   for I := Low(Parameters) to High(Parameters) do
@@ -210,7 +209,7 @@ end;
 function TPersistence.RetrieveRaces(): TList;
 var SQL: String;
     Results: RecordSet;
-    I, J: Integer;
+    I: Integer;
     Race: TRace;
     PictureStream: TStringStream;
 begin

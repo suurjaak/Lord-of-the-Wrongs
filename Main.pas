@@ -197,6 +197,8 @@ type
     PanelCardCoverBottom: TPanel;
     PanelSiteBottomCover: TPanel;
     PanelSiteLeftCover: TPanel;
+    InfoDatabaseRacesLabel: TLabel;
+    InfoDatabaseRacesCaption: TLabel;
     procedure ButtonSavePictureClick(Sender: TObject);
     procedure ButtonPreviewCardClick(Sender: TObject);
     procedure ExitButtonClick(Sender: TObject);
@@ -2904,13 +2906,24 @@ end;
 
 // Updates the database information (name, size, cards count) on first page
 procedure TMainForm.UpdateDatabaseInfo();
+var
+  FellowshipRaces, ShadowRaces, I: Integer;
 begin
+  FellowshipRaces := 0;
+  ShadowRaces := 0;
   InfoDatabaseNameLabel.Caption := Database.Filename;
   InfoDatabaseSizeLabel.Caption := FormatByteSize(Database.GetSize());
   InfoDatabaseCardsLabel.Caption := IntToStr(Cards.Count);
   InfoDatabaseSitesLabel.Caption := IntToStr(Sites.Count);
   InfoDatabaseDecksLabel.Caption := IntToStr(Decks.Count);
   InfoDatabaseCreatedLabel.Caption := GetSetting('DatabaseCreated');
+  for I := 0 to Races.Count - 1 do begin
+    if TRace(Races.Items[I]).IsGood then
+      Inc(FellowshipRaces)
+    else
+      Inc(ShadowRaces);
+  end;
+  InfoDatabaseRacesLabel.Caption := Format('%d Fellowship and %d Shadow races', [FellowshipRaces, ShadowRaces]);
 end;
 
 
