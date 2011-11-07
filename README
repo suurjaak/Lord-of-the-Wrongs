@@ -89,7 +89,6 @@ Fixed some interface bugs when logging out-logging in.
 Added sorting to the card editor combo box.
 Added the picture list page at http://***/lotp/img/content/.
 Added the file upload page at http://***/erki/lotp/img/content/upload.php.
-Real sorry if it's kind of crap, I am not very sober and it's 8 in the morning.
 Added sorting and stuff to card lists in the deck editor.
 Fixed some self-induced bugs when checking whether a card has been changed. 
 
