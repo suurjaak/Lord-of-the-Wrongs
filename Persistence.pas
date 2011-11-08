@@ -3,13 +3,14 @@
  *
  * @author    Erki Suurjaak
  * @created   21.12.2003
- * @modified  04.11.2011
+ * @modified  08.11.2011
  *)
 unit Persistence;
 
 interface
 
-uses Windows, Dialogs, DataClasses, classes, ElHashList, DISQLite3Api, Graphics;
+uses Windows, Dialogs, DataClasses, classes, DISQLite3Api, Graphics,
+     DCL_intf;
 
 type
   TPersistence = class(TObject)
@@ -36,6 +37,8 @@ type
     procedure StoreDeck(Deck: TDeck);
     // Creates the database tables and inserts default data, if needed
     procedure CheckRequiredTables();
+    // Updates the DatabaseModified setting.
+    procedure UpdateModification();
   public
     Filename: String;
     // Creates a new database connection. If the database does not exist,
@@ -58,7 +61,7 @@ type
     function RetrieveSites(): TList;
     // Retrieves certain settings from the settings table, in name-value pairs.
     // Values are TStrings.
-    function RetrieveSettings(): TElHashList;
+    function RetrieveSettings(): IStrStrMap;
     // Retrieves the content picture of the specified object.
     function RetrieveContentPicture(Item: TDataClass): TPicture;
     // Saves the object. If it's a new item, assigns it an ID.
@@ -72,7 +75,7 @@ type
 implementation
 
 uses
-  sysutils, jpeg, pngimage, DIUtils, Globals;
+  sysutils, jpeg, pngimage, DIUtils, Globals, HashMap;
 
 
 
@@ -162,6 +165,7 @@ begin
   finally
     try sqlite3_finalize(Stmt); finally end;
   end;
+  UpdateModification();
 end;
 
 
@@ -191,9 +195,9 @@ begin
         NumberOfFields := sqlite3_column_count(Stmt);
         SetLength(Result, I + 1, NumberOfFields);
         for J := 0 to NumberOfFields - 1 do begin
-          Value := AnsiString(sqlite3_column_str(Stmt, J));
-          Result[I, J] := Value;
-          //SetString(Result[I, J], Value, Length(Value));
+          Result[I, J] := sqlite3_column_str(Stmt, J);
+          //Result[I, J] := Value;
+          //SetString(Result[I, J], PChar(sqlite3_column_str(Stmt, J)), Length(Value));
         end;
         Inc(I);
       end;
@@ -250,6 +254,7 @@ begin
 
     Result.Add(Race);
   end;
+  SetLength(Results, 0, 0);
 end;
 
 
@@ -266,6 +271,7 @@ begin
   for I := Low(Results) to High(Results) do begin
     Result[I] := Results[I][0];
   end;
+  SetLength(Results, 0, 0);
 end;
 
 
@@ -311,6 +317,7 @@ begin
     Card.InternalComment := Results[I][18];
     Result.Add(Card);
   end;
+  SetLength(Results, 0, 0);
 end;
 
 
@@ -339,28 +346,25 @@ begin
     Site.Comment := Results[I][8];
     Result.Add(Site);
   end;
+  SetLength(Results, 0, 0);
 end;
 
 
 
 // Retrieves certain settings from the settings table, in name-value pairs.
 // Values are TStrings.
-function TPersistence.RetrieveSettings(): TElHashList;
+function TPersistence.RetrieveSettings(): IStrStrMap;
 var SQL: String;
     Results: RecordSet;
     I: Integer;
-    Name: String;
-    Value: TString;
 begin
-  Result := TElHashList.Create();
+  Result := TStrStrHashMap.Create();
   SQL := 'SELECT name, value FROM settings';
   Results := ExecuteSelect(SQL);
   for I := Low(Results) to High(Results) do begin
-    Name := Results[I][0];
-    Value := TString.Create();
-    Value.Value := Results[I][1];
-    Result.AddItem(Name, Value);
+    Result.PutValue(Results[I][0], Results[I][1]);
   end;
+  SetLength(Results, 0, 0);
 end;
 
 
@@ -374,7 +378,6 @@ var SQL, SubSQL: String;
     DeckCard: TDeckCard;
     DeckSite: TDeckSite;
 begin
-  SubResults := nil;
   SQL := 'SELECT id, title, time_of_creation, comment FROM decks ' +
          'ORDER BY title';
   Results := ExecuteSelect(SQL);
@@ -387,7 +390,6 @@ begin
     Deck.Comment := Results[I][3];
     SubSQL := 'SELECT id, card_id FROM deck_cards WHERE deck_id = :deck_id';
     SubResults := ExecuteSelect(SubSQL, [Deck.Id]);
-    Deck.Cards := TList.Create();
     for J := Low(SubResults) to High(SubResults) do begin
       DeckCard := TDeckCard.Create();
       DeckCard.ID := StrToInt(SubResults[J][0]);
@@ -396,7 +398,6 @@ begin
     end;
     SubSQL := 'SELECT id, site_id FROM deck_sites WHERE deck_id = :deck_id';
     SubResults := ExecuteSelect(SubSQL, [Deck.Id]);
-    Deck.Sites := TList.Create();
     for J := Low(SubResults) to High(SubResults) do begin
       DeckSite := TDeckSite.Create();
       DeckSite.ID := StrToInt(SubResults[J][0]);
@@ -405,6 +406,8 @@ begin
     end;
     Result.Add(Deck);
   end;
+  SetLength(Results, 0, 0);
+  SetLength(Subresults, 0, 0);
 end;
 
 
@@ -492,6 +495,7 @@ begin
     NewID := ExecuteStore(SQL, [Site.Title, Site.PictureFilename, @ContentPictureStream, Site.Time,
                                 Site.TwilightCost, Site.Direction, Site.Text, Site.Comment, Site.ID]);
   end;
+  ContentPictureStream.Free();
   if (IsInsert) then
     Site.ID := NewID;
 end;
@@ -561,6 +565,7 @@ begin
       end;
     end;
   end;
+  SetLength(Results, 0, 0);
 end;
 
 
@@ -604,6 +609,7 @@ begin
   finally
     try sqlite3_finalize(Stmt); finally end;
   end;
+  UpdateModification();
 end;
 
 
@@ -674,6 +680,7 @@ begin
       Result := Imager.LoadPictureFromStream(StringStream, '.png');
       StringStream.Free();
     end;
+    SetLength(Results, 0, 0);
   end else begin
     raise Exception.Create('Fatal Error: trying to get content picture for an object of unknown class ' + Item.ClassName);
   end;
@@ -685,6 +692,23 @@ end;
 function TPersistence.GetSize(): Integer;
 begin
   Result := GetFileSize(Filename);
+end;
+
+
+// Updates the DatabaseModified setting.
+procedure TPersistence.UpdateModification();
+var
+  Results: RecordSet;
+begin
+  try
+    sqlite3_exec_fast(DB, 'INSERT OR REPLACE INTO settings (name, value) VALUES ("DatabaseModified", datetime("now"))');
+    Results := ExecuteSelect('SELECT value FROM settings WHERE name = "DatabaseModified"');
+    if Length(Results) > 0 then begin
+      Settings.PutValue('DatabaseModified', Results[0][0]);
+    end;
+    SetLength(Results, 0, 0);
+  except
+  end;
 end;
 
 
@@ -716,11 +740,12 @@ const
   RACE_PICTURES: array[1..4] of String = (
     'Character', 'Other', 'Strength', 'Health'
   );
-  SETTING_DEFAULTS: array[1..4] of String = (
+  SETTING_DEFAULTS: array[1..5] of String = (
     'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteFirstTime", "14")',
     'INSERT OR IGNORE INTO settings (name, value) VALUES ("CardThumbnailWidth", "100")',
     'INSERT OR IGNORE INTO settings (name, value) VALUES ("CardThumbnailHeight", "140")',
-    'INSERT OR IGNORE INTO settings (name, value) VALUES ("DatabaseCreated", datetime("now"))'
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("DatabaseCreated", datetime("now"))',
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("DatabaseModified", datetime("now"))'
   );
   TIME_DEFAULTS: array[1..9] of String = (
     'INSERT OR IGNORE INTO times (time, ordering) VALUES ("14", 1)',
@@ -735,27 +760,27 @@ const
   );
 var
   I, J, K: Integer;
-  TableDefaultsMap: TElHashList;
+  TableDefaultsMap: IStrMap;
   Defaults: TStringList;
   DBResults: RecordSet;
   Streams: array of TResourceStream;
 begin
-  TableDefaultsMap := TElHashlist.Create();
+  TableDefaultsMap := TStrHashMap.Create();
   Defaults := TStringList.Create();
   For I := Low(RACE_DEFAULTS) to High(RACE_DEFAULTS) do Defaults.Add(RACE_DEFAULTS[I]);
-  TableDefaultsMap.AddItem('races', Defaults);
+  TableDefaultsMap.PutValue('races', Defaults);
   Defaults := TStringList.Create();
   For I := Low(SETTING_DEFAULTS) to High(SETTING_DEFAULTS) do Defaults.Add(SETTING_DEFAULTS[I]);
-  TableDefaultsMap.AddItem('settings', Defaults);
+  TableDefaultsMap.PutValue('settings', Defaults);
   Defaults := TStringList.Create();
   For I := Low(TIME_DEFAULTS) to High(TIME_DEFAULTS) do Defaults.Add(TIME_DEFAULTS[I]);
-  TableDefaultsMap.AddItem('times',    Defaults);
+  TableDefaultsMap.PutValue('times',    Defaults);
 
   for I := Low(TABLES) to High(TABLES) do begin
     DBResults := ExecuteSelect('SELECT name FROM sqlite_master WHERE name = :name', [TABLES[I]]);
+    Defaults := TableDefaultsMap.GetValue(Tables[I]) as TStringList;
     if Length(DBResults) = 0 then begin
       ExecuteAction(TABLE_DEFINITIONS[I]);
-      Defaults := TableDefaultsMap.Item[Tables[I]];
       if Defaults <> nil then begin
         for J := 0 to Defaults.Count - 1 do begin
           if 'races' = TABLES[I] then begin
@@ -765,12 +790,13 @@ begin
             end;
             ExecuteAction(Defaults[J], [@Streams[0], @Streams[1], @Streams[2], @Streams[3]]);
             for K := Low(Streams) to High(Streams) do Streams[K].Free();
+            SetLength(Streams, 0);
           end else
             ExecuteAction(Defaults[J]);
         end;
-        Defaults.Free();
       end;
     end;
+    SetLength(DBResults, 0, 0);
   end;
 end;
 

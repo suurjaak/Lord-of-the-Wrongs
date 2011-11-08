@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   21.12.2003
- * @modified  03.11.2011
+ * @modified  08.11.2011
  *)
 unit DataClasses;
 
@@ -12,6 +12,21 @@ interface
 uses Graphics, classes;
 
 type
+  TStringArray = array of String;
+  RecordSet = array of TStringArray;
+
+  // Basically, just a container for a string.
+  TString = class
+    Value: String;
+  end;
+
+  TSortInfo = class
+    SortColumn: String;
+    IsSortReversed: Boolean;
+    constructor Create();
+  end;
+
+
   TDataClass = class
   public
     ID: Integer;
@@ -33,6 +48,7 @@ type
     // Returns the TPicture of the specified type for this race
     // (types 'Character', 'Other', 'Strength', 'Health'.
     function GetPicture(PictureType: String): TPicture;
+    destructor Destroy(); override;
   end;
 
 
@@ -58,7 +74,7 @@ type
     Race: TRace;
     OriginalRace: TRace;     // For undo purposes
     ShowName: String; // The name shown in lists etc, incl. race and type
-    HiddenComment: String;
+    InternalComment: String;
     REQUIRED_FIELDS_EMPTY_MESSAGE: String;
     ContentPicture: TPicture;
     OriginalContentPicture: TPicture; // For undo purposes
@@ -66,7 +82,6 @@ type
     constructor Create();
     destructor Destroy(); override;
     function GetShowName(): String;
-    // Checks whether all the required fields contain data
     function AreRequiredFieldsEmpty(): Boolean;
   end;
 
@@ -120,6 +135,7 @@ type
     // Whether the deck contains this particular site
     function HasSite(Site: TSite): Boolean;
     constructor Create();
+    destructor Destroy(); override;
   end;
 
 
@@ -128,14 +144,31 @@ implementation
 
 uses SysUtils, Globals;
 
+constructor TSortInfo.Create();
+begin
+  SortColumn := CARD_LIST_COLUMN_TITLE;
+  IsSortReversed := False;
+end;
+
+
+// Returns the TPicture of the specified type for this race
+// (types 'Character', 'Other', 'Strength', 'Health'.
 function TRace.GetPicture(PictureType: String): TPicture;
 var
   ResourceName: String;
 begin
   ResourceName := StringReplace(Name + ' ' + PictureType, ' ', '_', [rfReplaceAll]);
-  Result := Imager.GetResource(ResourceName, 'png');
+  Result := Imager.GetResource(ResourceName, '.png');
 end;
 
+
+destructor TRace.Destroy();
+begin
+  CharacterPicture.Free();
+  OtherPicture.Free();
+  StrengthPicture.Free();
+  HealthPicture.Free();
+end;
 
 
 function TDeck.GetCardsCount(): Integer;
@@ -168,6 +201,22 @@ begin
   Sites := TList.Create();
 end;
 
+
+destructor TDeck.Destroy();
+var I: Integer;
+begin
+  for I := 0 to Cards.Count - 1 do begin
+    TDeckCard(Cards.Items[I]).Free();
+  end;
+  for I := 0 to Sites.Count - 1 do begin
+    TDeckSite(Sites.Items[I]).Free();
+  end;
+  Cards.Free();
+  Sites.Free();
+end;
+
+
+// Whether the deck contains this particular site
 function TDeck.HasSite(Site: TSite): Boolean;
 var I: Integer;
     DeckSite: TDeckSite;
@@ -190,6 +239,7 @@ begin
     OriginalContentPicture := nil;
     Thumbnail := nil;
 end;
+
 
 destructor TCard.Destroy();
 begin
@@ -238,7 +288,7 @@ end;
 function TSite.GetShowName(): String;
 begin
   if not (Length(ShowName) > 0) then begin
-    ShowName := Title + ' (time ' + Time + ')';
+    ShowName := Format('%s (time %s)', [Title, Time]);
   end;
   Result := ShowName;
 end;

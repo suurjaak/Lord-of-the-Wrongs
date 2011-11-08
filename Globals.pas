@@ -3,14 +3,14 @@
  *
  * @author    Erki Suurjaak
  * @created   20.12.2003
- * @modified  04.11.2011
+ * @modified  08.11.2011
  *)
 unit Globals;
 
 interface
 
-uses DataClasses, Imaging, ElHashList, Persistence, classes, SysUtils, Graphics,
-     SyncObjs, Windows;
+uses DataClasses, Imaging, Persistence, classes, SysUtils, Graphics,
+     SyncObjs, Windows, DCL_intf;
 
 const
   // %s will be replaced by application version.
@@ -133,12 +133,13 @@ function FormatByteSize(Size: Integer): String;
 function GetApplicationVersion(): String;
 
 
+
 var
   Database: TPersistence;
   // Maps the positions in ComboCardList to TCard objects
-  ComboCardListMap: TElHashList;
-  ComboListDecksMap: TElHashList;
-  ComboSiteListMap: TElHashList;
+  ComboCardListMap: IStrMap;
+  ComboListDecksMap: IStrMap;
+  ComboSiteListMap: IStrMap;
   IsCardChanged: Boolean = False;
   IsDeckChanged: Boolean = False;
   IsSiteChanged: Boolean = False;
@@ -157,8 +158,6 @@ var
   IgnoreCardChanges: Boolean = False;
   IgnoreSiteChanges: Boolean = False;
   IgnoreDeckChanges: Boolean = False;
-  PendingThumbnails: TList;
-  PendingThumbnailCards: TList;
   PreviewedCard: TCard = nil;
   TransparentPixel: TPicture;
   CurrentCard: TCard;
@@ -170,7 +169,7 @@ var
   Cards: TList;
   Races: TList;
   Sites: TList;
-  Settings: TElHashList;
+  Settings: IStrStrMap;
   Imager: TImaging;
   CardLoadSection: TCriticalSection;
 
@@ -178,7 +177,7 @@ var
 
 implementation
 
-uses db, Forms;
+uses db, Forms, ShlObj;
 
 // Returns the tag number for the specified type, required
 // for automatic interface changes in the card editor
@@ -343,22 +342,19 @@ end;
 
 // Returns a system setting, from the Settings map
 function GetSetting(Name: String): String;
-var Temp: TString;
 begin
-  Result := '';
-  Temp := Settings.Item[Name];
-  if (Temp <> nil) then
-    Result := Temp.Value;
+  Result := Settings.GetValue(Name);
 end;
+
 
 // Returns a system setting, from the Settings map
 function GetSettingInt(Name: String): Integer;
-var Temp: TString;
+var Temp: String;
 begin
   Result := 0;
-  Temp := Settings.Item[Name];
-  if (Temp <> nil) then
-    Result := StrToInt(Temp.Value);
+  Temp := Settings.GetValue(Name);
+  if (Temp <> '') then
+    Result := StrToInt(Temp);
 end;
 
 // Removes the site from the global sites array and elsewhere

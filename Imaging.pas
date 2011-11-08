@@ -3,14 +3,14 @@
  *
  * @author    Erki Suurjaak
  * @created   02.01.2004
- * @modified  04.11.2011
+ * @modified  08.11.2011
  *)
 unit Imaging;
 
 interface
 
-uses Windows, ElHashList, graphics, dialogs, SysUtils, classes, GR32,
-     DataClasses, SyncObjs;
+uses Windows, graphics, dialogs, SysUtils, classes, SyncObjs, GR32, DCL_intf,
+     DataClasses;
 
 type
   TResizeType = (rsThumbnail, rsContent);
@@ -44,8 +44,7 @@ type
 
   TImaging = class(TObject)
   private
-    Cache: TElHashList;
-    PendingResizeMap: TElHashList;
+    Cache: IStrMap;
     ResizeIDCounter: Integer;
     ResizeSection: TCriticalSection;
     // Encodes spaces in the URL
@@ -57,7 +56,8 @@ type
     // are kept in images.res and embedded into the application on compilation.
     // Filename argument is used for specifying content type, can
     // be whole filename or just extension, e.g. '.png'|'.bmp'|'.jpg'
-    function GetResource(Name: String; Filename: String): TPicture;
+    // Cache - whether the image is cached.
+    function GetResource(Name: String; Filename: String; DoCache: Boolean = True): TPicture;
     // Loads the picture from the local disk.
     function LoadPictureFromDisk(Filename: String): TPicture;
     // Loads the picture from the opened stream (bmp/jpg/png/gif).
@@ -85,7 +85,7 @@ type
 
 implementation
 
-uses jpeg, Globals, HttpProt, pngimage, GR32_Resamplers, axctrls, main, ExtCtrls;
+uses jpeg, Globals, HttpProt, pngimage, GR32_Resamplers, axctrls, main, ExtCtrls, HashMap;
 
 
 
@@ -142,8 +142,7 @@ end;
 
 constructor TImaging.Create();
 begin
-  Cache := TElHashList.Create();
-  PendingResizeMap := TElHashList.Create();
+  Cache := TStrHashMap.Create();
   ResizeSection := TCriticalSection.Create();
   ResizeIDCounter := 0;
 end;
@@ -151,9 +150,7 @@ end;
 
 destructor TImaging.Destroy();
 begin
-  Cache.Clear();
-  Cache.Free();
-  PendingResizeMap.Free();
+//  Cache.Free();
   ResizeSection.Free();
 end;
 
@@ -162,18 +159,19 @@ end;
 // are kept in images.res and embedded into the application on compilation.
 // Filename argument is used for specifying content type, can
 // be whole filename or just extension, e.g. '.png'|'.bmp'|'.jpg'
-function TImaging.GetResource(Name: String; Filename: String): TPicture;
+// Cache - whether the image is cached.
+function TImaging.GetResource(Name: String; Filename: String; DoCache: Boolean = True): TPicture;
 var
   CacheID: String;
   RStream: TResourceStream;
 begin
   CacheID := 'resource://' + Name;
-  Result := Cache.Item[CacheID];
+  Result := Cache.GetValue(CacheID) as TPicture;
   if (Result = nil) then begin
     RStream := TResourceStream.Create(hInstance, Name, RT_RCDATA);
     Result := LoadPictureFromStream(RStream, Filename);
     RStream.Free();
-    Cache.AddItem(CacheID, Result);
+    if (DoCache) then Cache.PutValue(CacheID, Result);
   end;
 end;
 
@@ -216,7 +214,7 @@ begin
   end else if ((FileExtension = '.jpg') or (FileExtension = '.jpeg')) then begin
     Graphic := TJPEGImage.Create();
     Graphic.LoadFromStream(Stream);
-    TJPEGImage(Graphic).DIBNeeded();
+    TJPEGImage(Graphic).DIBNeeded(); // Decompress the jpeg image into a bitmap.
   end else if (FileExtension = '.png') then begin
     // Ridiculous workaround: TPNGObject cannot handle 8-bit PNGs with
     // an optimized palette (pictures are forced into standard/web-safe
@@ -310,6 +308,7 @@ begin
   if Graphic <> nil then begin
     Result := TPicture.Create();
     Result.Bitmap.Assign(Graphic);
+    Graphic.Free();
   end;
 end;
 
@@ -446,5 +445,6 @@ begin
   Inc(ResizeIDCounter);
   ResizeSection.Leave();
 end;
+
 
 end.

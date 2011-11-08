@@ -22,23 +22,36 @@ DEVELOPMENT INFORMATION
 -----------------------
 
 LOTW has been written in Delphi 7. It uses a number of third party libraries:
-- EldoS Container Library (version 2.3), by Eugene Mayevski
+- Delphi Container Library (version 0.8.8), by Jean-Philippe Bempel
+  http://sourceforge.net/projects/dclx
 - DISQLite (version 3.0.0), by Yunga
   http://www.yunqa.de/delphi/doku.php/products/sqlite3/index
 - Graphics32 (version 1.9.0)
   http://graphics32.org/wiki/
 - Internet Component Suite (version Jul 19, July 2007), by François Piette
   http://www.overbyte.be/frame_index.html?redirTo=/products/ics.html
-- PDJRotoLabel (version 1.10), Peric Djordje
+- PDJRotoLabel (version 1.10), by Peric Djordje
 - PNG Delphi (version 1.56), by Gustavo Huffenbacher Daud
   (discontinued; merged into newer Delphi versions)
 - TMS Component Pack (version 2.7), by TMS Software
   http://www.tmssoftware.com/
 
+Additionally, LOTW includes:
+- BrowseForFolderU unit, by Brian Cryer
+  http://www.cryer.co.uk/brian/delphi/howto_browseforfolder.htm
+
 
 
 CHANGELOG
 ---------
+
+2011-11-08
+Version 1.0.2, build 45.
+Swapped out TElHashList for the Delphi Container Library.
+Hunted down and fixed all memory leaks.
+Added "Save card images" and "Save site images" batch export functionality.
+Fixed errors on opening a non-SQLite file.
+Started showing timestamps in card editor.
 
 2011-11-04
 Version 1.0.1, build 44.

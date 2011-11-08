@@ -5,11 +5,13 @@ program lotw;
 
 uses
   Forms,
+  HashMap in 'HashMap.pas',
   Main in 'Main.pas' {MainForm},
   Globals in 'Globals.pas',
   DataClasses in 'DataClasses.pas',
   Imaging in 'Imaging.pas',
-  Persistence in 'Persistence.pas';
+  Persistence in 'Persistence.pas',
+  BrowseForFolderU in 'BrowseForFolderU.pas';
 
 begin
   Application.Initialize;
