@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   21.12.2003
- * @modified  09.11.2011
+ * @modified  11.11.2011
  *)
 unit DataClasses;
 
@@ -32,11 +32,27 @@ type
     ID: Integer;
   end;
 
+  TCardType = class(TDataClass)
+  public
+    Name: String;
+    IsCharacter: Boolean;
+    IsPossession: Boolean;
+    IsStrength: Boolean;
+    IsHealth: Boolean;
+    ContentPictureMaxWidth: Integer;
+    ContentPictureMaxHeight: Integer;
+    ContentPictureLeft: Integer;
+    ContentPictureTop: Integer;
+    MiddleTitleLeft: Integer;
+    MiddleTitleWidth: Integer;
+  end;
+
 
   TRace = class(TDataClass)
   public
     Name: String;
     IsGood: Boolean;
+    CharacterName: String; // Name of a character card (e.g. minion,character)
     CharacterPicture: TPicture;
     OtherPicture: TPicture;
     StrengthPicture: TPicture;
@@ -55,8 +71,8 @@ type
 
   TCard = class(TDataClass)
   public
-    CardType: String;
-    OriginalCardType: String; // For undo purposes
+    CardType: TCardType;
+    OriginalCardType: TCardType; // For undo purposes
     TimeOfCreation: String;
     ExactTimeOfCreation: String;
     TimeOfModification: String;
@@ -255,14 +271,15 @@ begin
   OriginalContentPicture := nil;
   IsContentPictureChanged := False;
   Thumbnail := nil;
+  CardType := nil;
 end;
 
 
 destructor TCard.Destroy();
 begin
-    ContentPicture.Free();
-    OriginalContentPicture.Free();
-    Thumbnail.Free();
+  ContentPicture.Free();
+  OriginalContentPicture.Free();
+  Thumbnail.Free();
 end;
 
 
@@ -273,7 +290,7 @@ begin
     ShowName := Title;
     if (Length(Subtitle) > 0)
       then ShowName := ShowName + ', ' + Subtitle;
-    ShowName := ShowName + ' (' + Race.Name + ' ' + CardType + ')';
+    ShowName := ShowName + ' (' + Race.Name + ' ' + CardType.Name + ')';
   end;
   Result := ShowName;
 end;

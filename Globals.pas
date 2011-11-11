@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   20.12.2003
- * @modified  10.11.2011
+ * @modified  11.11.2011
  *)
 unit Globals;
 
@@ -17,8 +17,8 @@ const
   COPYRIGHT_TEXT_TEMPLATE =
     'LOTW %s, written by Erki Suurjaak, initially in 2003. ' +
     'Most card media and game logic courtesy of Decipher, Inc.';
-  // Whether some debug messages are printed or not
-  DEBUG = False;
+
+  DEBUG = False; // Whether some debug messages are printed or not
 
   DEFAULT_DB_FILENAME = 'lotw.db';
 
@@ -27,26 +27,9 @@ const
 
   NEW_LINE = #13#10;
 
-  TAG_NEW_CARD = 16;
-  TAG_CHARACTER_CONTROL = 32;
-  TAG_CONDITION_CONTROL = 64;
-  TAG_EVENT_CONTROL = 128;
-  TAG_POSSESSION_CONTROL = 256;
-  TAG_SHADOW_CONTROL = 512;
-  TAG_NEW_SITE = 1024;
-
-  CARD_TYPE_CHARACTER = 'character';
-  CARD_TYPE_CONDITION = 'condition';
-  CARD_TYPE_EVENT = 'event';
-  CARD_TYPE_POSSESSION = 'possession';
-
-
-
-  CARD_TYPES: array[0..3] of String = ('character', 'condition', 'event', 'possession');
-
-  CARD_TYPE_TAGS: array[0..3] of Integer =
-    (TAG_CHARACTER_CONTROL, TAG_CONDITION_CONTROL, TAG_EVENT_CONTROL, TAG_POSSESSION_CONTROL);
-
+  // TPageControl page edit components are cleared in bulk, except those
+  // marked with this tag.
+  TAG_NOCLEAR  = 4096;
 
   CARD_LIST_COLUMN_TITLE = 'Title';
   CARD_LIST_COLUMN_TWILIGHT_COST = 'Twilight Cost';
@@ -61,30 +44,13 @@ const
   SITE_LIST_COLUMN_TIME = 'Time';
   SITE_LIST_COLUMN_TWILIGHT_COST = 'Twilight Cost';
 
-  DECK_LIST_COLUMN_TITLE   = 'Title';
-  DECK_LIST_COLUMN_CARDS   = 'Cards';
-  DECK_LIST_COLUMN_COMMENT = 'Comment';
-
   CARD_LIST_FILTER_RACES_ALL = ' ';
   CARD_LIST_FILTER_RACES_FELLOWSHIP = 'Fellowship Races';
   CARD_LIST_FILTER_RACES_SHADOW = 'Shadow Races';
 
   CARD_LIST_FILTER_TYPES_ALL = ' ';
-
   CARD_LIST_FILTER_TIMES_ALL = ' ';
 
-  // The coordinates of the card image, used for saving it to file
-  CARD_CONTENT_PICTURE_MAX_WIDTH  = 285;
-  CARD_CONTENT_PICTURE_MAX_HEIGHT = 215;
-
-  // The coordinates of the site image, used for saving it to file
-  SITE_CONTENT_PICTURE_MAX_WIDTH  = 395;
-  SITE_CONTENT_PICTURE_MAX_HEIGHT = 225;
-
-
-// Returns the tag number for the specified type, required
-// for automatic interface changes in the card editor
-function GetCardTypeTag(CardType: String): Integer;
 // Removes the card from the global cards array and elsewhere
 procedure RemoveCardFromVariables(var Card: TCard);
 // Removes the site from the global sites array and elsewhere
@@ -103,6 +69,10 @@ function GetSiteByID(ID: Integer): TSite;
 function GetRaceByID(ID: Integer): TRace;
 // Returns the race with the specified name
 function GetRaceByName(Name: String): TRace;
+// Returns the card type with the specified ID
+function GetCardTypeByID(ID: Integer): TCardType;
+// Returns the card type with the specified name
+function GetCardTypeByName(Name: String): TCardType;
 // Does nothing
 procedure Nothing();
 // Checks whether the String is a valid number
@@ -167,6 +137,7 @@ var
   Races: TList;
   Sites: TList;
   Settings: IStrStrMap;
+  CardTypes: TList;
   Imager: TImaging;
   CardLoadSection: TCriticalSection;
   CardImageArea: TRect;
@@ -174,21 +145,9 @@ var
   LastExportDirectory: String = '';
 
 
-
 implementation
 
 uses Forms;
-
-// Returns the tag number for the specified type, required
-// for automatic interface changes in the card editor
-function GetCardTypeTag(CardType: String): Integer;
-var I: Integer;
-begin
-  Result := -1;
-  for I := Low(CARD_TYPES) to High(CARD_TYPES) do
-    if (CARD_TYPES[I] = CardType) then
-      Result := CARD_TYPE_TAGS[I];
-end;
 
 
 // Removes the card from the global cards array and elsewhere
@@ -264,6 +223,20 @@ begin
 end;
 
 
+// Returns the card type with the specified ID
+function GetCardTypeByID(ID: Integer): TCardType;
+var I: Integer;
+begin
+  Result := nil;
+  for I := 0 to CardTypes.Count - 1 do
+    if (TCardType(CardTypes.Items[I]).ID = ID) then begin
+      Result := CardTypes[I];
+      Break;
+    end;
+end;
+
+
+// Returns the race with the specified name
 function GetRaceByName(Name: String): TRace;
 var I: Integer;
 begin
@@ -276,6 +249,20 @@ begin
 end;
 
 
+// Returns the card type with the specified name
+function GetCardTypeByName(Name: String): TCardType;
+var I: Integer;
+begin
+  Result := nil;
+  for I := 0 to CardTypes.Count - 1 do
+    if (TCardType(CardTypes.Items[I]).Name = Name) then begin
+      Result := CardTypes[I];
+      Break;
+    end;
+end;
+
+
+// Removes the card object from the deck object
 procedure RemoveCardFromDeck(var Deck: TDeck; var Card: TDeckCard);
 begin
   while (Deck.Cards.Remove(Card) <> -1) do Nothing();
@@ -515,6 +502,7 @@ begin
     AttachThreadInput(GetWindowThreadProcessId(Handle, nil), GetCurrentThreadId, False);
   end;
 end;
+
 
 
 end.

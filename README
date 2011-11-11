@@ -26,6 +26,8 @@ LOTW has been written in Delphi 7. It uses a number of third party libraries:
   http://sourceforge.net/projects/dclx
 - DISQLite (version 3.0.0), by Yunga
   http://www.yunqa.de/delphi/doku.php/products/sqlite3/index
+- FastMM (version 4.99), by Pierre le Riche
+  http://sourceforge.net/projects/fastmm/
 - Graphics32 (version 1.9.0)
   http://graphics32.org/wiki/
 - Internet Component Suite (version Jul 19, July 2007), by François Piette
@@ -44,6 +46,10 @@ Additionally, LOTW includes:
 
 CHANGELOG
 ---------
+
+2011-11-11  1.0.4, build 47.
+- Moved card types from constants to database.
+- Rearranged card picture internal layout.
 
 2011-11-10  1.0.3, build 46.
 - Improved capturing card and site image content from application window,

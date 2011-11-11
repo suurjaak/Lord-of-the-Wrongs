@@ -94,7 +94,7 @@ OutputDir=
 UnitOutputDir=
 PackageDLLOutputDir=
 PackageDCPOutputDir=
-SearchPath=C:\stuff\projektid\lotw\src\components\ICS\Delphi\Vc32;C:\stuff\projektid\lotw\src\components\PDJRotoLabel;C:\stuff\projektid\lotw\src\components\DISQLite\D7;C:\stuff\projektid\lotw\src\components\DISQLite\Source;C:\stuff\projektid\lotw\src\components\pngimage;C:\stuff\projektid\lotw\src\components\graphics32-1-9-0-r1336;C:\stuff\projektid\lotw\src\components\Delphi Container Library;C:\stuff\projektid\lotw\src\components\UniHTM;C:\stuff\projektid\lotw\src\components\FastMM
+SearchPath=C:\stuff\projektid\lotw\src\components\PDJRotoLabel;C:\stuff\projektid\lotw\src\components\DISQLite\D7;C:\stuff\projektid\lotw\src\components\DISQLite\Source;C:\stuff\projektid\lotw\src\components\pngimage;C:\stuff\projektid\lotw\src\components\Delphi Container Library;C:\stuff\projektid\lotw\src\components\FastMM;C:\stuff\projektid\lotw\src\components\TMS Component Pack;C:\stuff\projektid\lotw\src\components\Graphics32;C:\stuff\projektid\lotw\src\components\Internet Component Suite;C:\stuff\projektid\lotw\src\components\Internet Component Suite\Delphi\Vc32
 Packages=Vcl40;Vclx40;Vcldb40;vcldbx40;VclSmp40;Qrpt40;TeeUI40;teedb40;tee40;ibevnt40;nmfast40;ContLibD4;rtl;OverbyteIcsD7Run;vcl;GR32_D7
 Conditionals=
 DebugSourceDirs=
@@ -110,12 +110,12 @@ ActiveLang=
 ProjectLang=
 RootDir=
 [Version Info]
-IncludeVerInfo=0
+IncludeVerInfo=1
 AutoIncBuild=0
 MajorVer=1
 MinorVer=0
-Release=3
-Build=46
+Release=4
+Build=47
 Debug=0
 PreRelease=0
 Special=0
@@ -126,24 +126,11 @@ CodePage=1257
 [Version Info Keys]
 CompanyName=Erki Suurjaak
 FileDescription=The Lord of The Wrongs card and deck creator
-FileVersion=1.0.3.46
+FileVersion=1.0.4.47
 InternalName=lotw.exe
 LegalCopyright=Created by Erki Suurjaak.
 LegalTrademarks=A parody of the Lord of the Rings trading card game, property of Decipher Inc. It uses the backgrounds of the original game and takes its logic and rules from there as well.
 OriginalFilename=lotw.exe
 ProductName=The Lord of the Wrongs
-ProductVersion=1.0.3.46
+ProductVersion=1.0.4.47
 Comments=
-[HistoryLists\hlUnitAliases]
-Count=1
-Item0=WinTypes=Windows;WinProcs=Windows;DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE;
-[HistoryLists\hlSearchPath]
-Count=8
-Item0=C:\stuff\projektid\lotw\src\components\ICS\Delphi\Vc32;C:\stuff\projektid\lotw\src\components\PDJRotoLabel;C:\stuff\projektid\lotw\src\components\DISQLite\D7;C:\stuff\projektid\lotw\src\components\DISQLite\Source;C:\stuff\projektid\lotw\src\components\pngimage;C:\stuff\projektid\lotw\src\components\graphics32-1-9-0-r1336;C:\stuff\projektid\lotw\src\components\Delphi Container Library;C:\stuff\projektid\lotw\src\components\UniHTM;C:\stuff\projektid\lotw\src\components\FastMM
-Item1=$(DELPHI)\Lib\Debug;C:\stuff\projektid\lotw\src\components\ICS\Delphi\Vc32;C:\stuff\projektid\lotw\src\components\PDJRotoLabel;C:\stuff\projektid\lotw\src\components\DISQLite\D7;C:\stuff\projektid\lotw\src\components\DISQLite\Source;C:\stuff\projektid\lotw\src\components\pngimage;C:\stuff\projektid\lotw\src\components\graphics32-1-9-0-r1336;C:\stuff\projektid\lotw\src\components\Delphi Container Library;C:\stuff\projektid\lotw\src\components\UniHTM;C:\stuff\projektid\lotw\src\components\FastMM
-Item2=$(DELPHI)\Lib\Debug;C:\stuff\projektid\lotw\src\components\ICS\Delphi\Vc32;C:\stuff\projektid\lotw\src\components\PDJRotoLabel;C:\stuff\projektid\lotw\src\components\DISQLite\D7;C:\stuff\projektid\lotw\src\components\DISQLite\Source;C:\stuff\projektid\lotw\src\components\pngimage;C:\stuff\projektid\lotw\src\components\graphics32-1-9-0-r1336;C:\stuff\projektid\lotw\src\components\Delphi Container Library;C:\stuff\projektid\lotw\src\components\UniHTM
-Item3=C:\stuff\projektid\lotw\src\components\ICS\Delphi\Vc32;C:\stuff\projektid\lotw\src\components\PDJRotoLabel;C:\stuff\projektid\lotw\src\components\DISQLite\D7;C:\stuff\projektid\lotw\src\components\DISQLite\Source;C:\stuff\projektid\lotw\src\components\pngimage;C:\stuff\projektid\lotw\src\components\graphics32-1-9-0-r1336;C:\stuff\projektid\lotw\src\components\Delphi Container Library;C:\stuff\projektid\lotw\src\components\UniHTM
-Item4=$(DELPHI)\Lib\Debug;C:\stuff\projektid\lotw\src\components\ICS\Delphi\Vc32;C:\stuff\projektid\lotw\src\components\PDJRotoLabel;C:\stuff\projektid\lotw\src\components\DISQLite\D7;C:\stuff\projektid\lotw\src\components\DISQLite\Source;C:\stuff\projektid\lotw\src\components\pngimage;C:\stuff\projektid\lotw\src\components\graphics32-1-9-0-r1336;C:\stuff\projektid\lotw\src\components\FastMM;C:\stuff\projektid\lotw\src\components\Delphi Container Library;C:\stuff\projektid\lotw\src\components\UniHTM
-Item5=$(DELPHI)\Lib\Debug;c:\program files\programming\delphi\Components\UniHTM\unihtmd4;C:\stuff\projektid\lotw\src\components\ICS\Delphi\Vc32;C:\stuff\projektid\lotw\src\components\PDJRotoLabel;C:\stuff\projektid\lotw\src\components\DISQLite\D7;C:\stuff\projektid\lotw\src\components\DISQLite\Source;C:\stuff\projektid\lotw\src\components\pngimage;C:\stuff\projektid\lotw\src\components\graphics32-1-9-0-r1336;C:\stuff\projektid\lotw\src\components\FastMM;C:\stuff\projektid\lotw\src\components\Delphi Container Library
-Item6=$(DELPHI)\Lib\Debug;c:\program files\programming\delphi\Components\container library;c:\program files\programming\delphi\Components\UniHTM\unihtmd4;C:\stuff\projektid\lotw\src\components\ICS\Delphi\Vc32;C:\stuff\projektid\lotw\src\components\PDJRotoLabel;C:\stuff\projektid\lotw\src\components\DISQLite\D7;C:\stuff\projektid\lotw\src\components\DISQLite\Source;C:\stuff\projektid\lotw\src\components\pngimage;C:\stuff\projektid\lotw\src\components\graphics32-1-9-0-r1336;C:\stuff\projektid\lotw\src\components\FastMM;C:\stuff\projektid\lotw\src\components\Delphi Container Library
-Item7=$(DELPHI)\Lib\Debug;c:\program files\programming\delphi\Components\container library;c:\program files\programming\delphi\Components\UniHTM\unihtmd4;C:\stuff\projektid\lotw\src\components\Container Library;C:\stuff\projektid\lotw\src\components\ICS\Delphi\Vc32;C:\stuff\projektid\lotw\src\components\PDJRotoLabel;C:\stuff\projektid\lotw\src\components\DISQLite\D7;C:\stuff\projektid\lotw\src\components\DISQLite\Source;C:\stuff\projektid\lotw\src\components\pngimage;C:\stuff\projektid\lotw\src\components\graphics32-1-9-0-r1336;C:\stuff\projektid\lotw\src\components\FastMM;C:\stuff\projektid\lotw\src\components\Delphi Container Library

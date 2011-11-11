@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   21.12.2003
- * @modified  09.11.2011
+ * @modified  11.11.2011
  *)
 unit Persistence;
 
@@ -62,6 +62,8 @@ type
     // Retrieves certain settings from the settings table, in name-value pairs.
     // Values are TStrings.
     function RetrieveSettings(): IStrStrMap;
+    // Retrieves all the card types in the database
+    function RetrieveCardTypes(): TList;
     // Retrieves the content picture of the specified object.
     function RetrieveContentPicture(Item: TDataClass): TPicture;
     // Saves the object. If it's a new item, assigns it an ID.
@@ -286,7 +288,7 @@ var SQL: String;
     Card: TCard;
     ThumbnailStream: TStringStream;
 begin
-  SQL := 'SELECT id, race_id, type, time_of_creation, title, subtitle, possession_type, ' +
+  SQL := 'SELECT id, race_id, type_id, time_of_creation, title, subtitle, possession_type, ' +
          'twilight_cost, is_unique, strength, health, time, text, comment, ' +
          'picture_filename, thumbnail, time_of_creation, last_modified, internal_comment FROM cards ' +
          'ORDER BY title, subtitle';
@@ -296,7 +298,7 @@ begin
     Card := TCard.Create();
     Card.ID := StrToInt(Results[I][0]);
     Card.Race := GetRaceByID(StrToInt(Results[I][1]));
-    Card.CardType := Results[I][2];
+    Card.CardType := GetCardTypeByID(StrToInt(Results[I][2]));
     Card.TimeOfCreation := Results[I][3];
     Card.Title := Results[I][4];
     Card.Subtitle := Results[I][5];
@@ -370,6 +372,40 @@ begin
 end;
 
 
+// Retrieves all the card types in the database
+function TPersistence.RetrieveCardTypes(): TList;
+var SQL: String;
+    Results: RecordSet;
+    I: Integer;
+    CardType: TCardType;
+begin
+  SQL := 'SELECT id, name, is_character, is_possession, is_strength, is_health, ' +
+         'content_picture_max_width, content_picture_max_height, ' +
+         'content_picture_left, content_picture_top, middle_title_left, ' +
+         'middle_title_width FROM card_types';
+  Results := ExecuteSelect(SQL);
+  Result := TList.Create();
+  for I := Low(Results) to High(Results) do begin
+    CardType := TCardType.Create();
+
+    CardType.ID := StrToInt(Results[I][0]);
+    CardType.Name := Results[I][1];
+    CardType.IsCharacter := (Results[I][2] = '1');
+    CardType.IsPossession := (Results[I][3] = '1');
+    CardType.IsStrength := (Results[I][4] = '1');
+    CardType.IsHealth := (Results[I][5] = '1');
+    CardType.ContentPictureMaxWidth := StrToInt(Results[I][6]);
+    CardType.ContentPictureMaxHeight := StrToInt(Results[I][7]);
+    CardType.ContentPictureLeft := StrToInt(Results[I][8]);
+    CardType.ContentPictureTop := StrToInt(Results[I][9]);
+    CardType.MiddleTitleLeft := StrToInt(Results[I][10]);
+    CardType.MiddleTitleWidth := StrToInt(Results[I][11]);
+
+    Result.Add(CardType);
+  end;
+  SetLength(Results, 0, 0);
+end;
+
 
 // Retrieves all the decks in the database
 function TPersistence.RetrieveDecks(): TList;
@@ -431,15 +467,15 @@ begin
   IsInsert := (Card.ID = 0);
   if (IsInsert) then
     begin
-    SQL := 'INSERT INTO cards (race_id, type, title, ' +
+    SQL := 'INSERT INTO cards (race_id, type_id, title, ' +
            'subtitle, possession_type, twilight_cost, is_unique, strength, health, ' +
            'time, text, comment, picture_filename, content_picture, thumbnail, ' +
            'last_modified, time_of_creation, internal_comment) VALUES ' +
-           '(:race_id, :type, :title, ' +
+           '(:race_id, :type_id, :title, ' +
            ':subtitle, :possession_type, :twilight_cost, :is_unique, :strength, :health, '+
            ':time, :text, :comment, :picture_filename, :content_picture, :thumbnail, ' +
            ':last_modified, :time_of_creation, :internal_comment)';
-    NewID := ExecuteStore(SQL, [Card.Race.ID, Card.CardType, Card.Title,
+    NewID := ExecuteStore(SQL, [Card.Race.ID, Card.CardType.ID, Card.Title,
                               Card.Subtitle, Card.PossessionType, Card.TwilightCost,
                               Card.IsUnique, Card.Strength, Card.Health, Card.Time,
                               Card.Text, Card.Comment, Card.PictureFilename,
@@ -448,12 +484,12 @@ begin
     end
   else
     begin
-    SQL := 'UPDATE cards SET race_id = :race_id, type = :type, title = :title, ' +
+    SQL := 'UPDATE cards SET race_id = :race_id, type_id = :type_id, title = :title, ' +
            'subtitle = :subtitle, possession_type = :possession_type, twilight_cost = :twilight_cost, ' +
            'is_unique = :is_unique, strength = :strength, health = :health, time = :time, text = :text, ' +
            'comment = :comment, picture_filename = :picture_filename, content_picture = :content_picture, ' +
            'thumbnail = :thumbnail, last_modified = :last_modified, internal_comment = :internal_comment WHERE id = :id';
-    NewID := ExecuteStore(SQL, [Card.Race.ID, Card.CardType, Card.Title,
+    NewID := ExecuteStore(SQL, [Card.Race.ID, Card.CardType.ID, Card.Title,
                                 Card.Subtitle, Card.PossessionType, Card.TwilightCost,
                                 Card.IsUnique, Card.Strength, Card.Health, Card.Time,
                                 Card.Text, Card.Comment, Card.PictureFilename,
@@ -705,7 +741,7 @@ begin
   try
     sqlite3_exec_fast(DB, 'INSERT OR REPLACE INTO settings (name, value) VALUES ("DatabaseModified", datetime("now"))');
     Results := ExecuteSelect('SELECT value FROM settings WHERE name = "DatabaseModified"');
-    if Length(Results) > 0 then begin
+    if (Length(Results) > 0) and (Settings <> nil) then begin
       Settings.PutValue('DatabaseModified', Results[0][0]);
     end;
     SetLength(Results, 0, 0);
@@ -717,37 +753,40 @@ end;
 // Creates the database tables and inserts default data, if needed
 procedure TPersistence.CheckRequiredTables();
 const
-  TABLES: array[1..8] of String = (
-    'cards', 'deck_cards', 'deck_sites', 'decks', 'races', 'settings', 'sites', 'times'
+  TABLES: array[1..9] of String = (
+    'cards', 'deck_cards', 'deck_sites', 'decks', 'races', 'settings', 'sites', 'times', 'card_types'
   );
-  TABLE_DEFINITIONS: array[1..8] of String = (
-    'CREATE TABLE IF NOT EXISTS cards ( id INTEGER PRIMARY KEY NOT NULL, race_id INTEGER NOT NULL DEFAULT 0, type TEXT NOT NULL, time_of_creation TEXT NOT NULL DEFAULT "", title TEXT NOT NULL, subtitle TEXT, ' + 'possession_type TEXT, twilight_cost INTEGER DEFAULT NULL, is_unique INTEGER DEFAULT 0, strength TEXT, health TEXT, time TEXT, TEXT TEXT, comment TEXT, ' + 'picture_filename TEXT, content_picture BLOB, thumbnail BLOB, last_modified TEXT DEFAULT NULL, internal_comment TEXT)',
+  TABLE_DEFINITIONS: array[1..9] of String = (
+    'CREATE TABLE IF NOT EXISTS cards ( id INTEGER PRIMARY KEY NOT NULL, race_id INTEGER NOT NULL DEFAULT 0, type_id INTEGER NOT NULL, time_of_creation TEXT NOT NULL DEFAULT "", title TEXT NOT NULL, subtitle TEXT, ' + 'possession_type TEXT, twilight_cost INTEGER DEFAULT NULL, is_unique INTEGER DEFAULT 0, strength TEXT, health TEXT, time TEXT, TEXT TEXT, comment TEXT, ' + 'picture_filename TEXT, content_picture BLOB, thumbnail BLOB, last_modified TEXT DEFAULT NULL, internal_comment TEXT)',
     'CREATE TABLE IF NOT EXISTS deck_cards ( id INTEGER PRIMARY KEY NOT NULL, deck_id INTEGER NOT NULL DEFAULT 0, card_id INTEGER NOT NULL DEFAULT 0)',
     'CREATE TABLE IF NOT EXISTS deck_sites ( id INTEGER PRIMARY KEY NOT NULL, deck_id INTEGER NOT NULL DEFAULT 0, site_id INTEGER NOT NULL DEFAULT 0)',
     'CREATE TABLE IF NOT EXISTS decks ( id INTEGER PRIMARY KEY NOT NULL, title TEXT NOT NULL, time_of_creation TEXT NOT NULL DEFAULT "", comment TEXT)',
-    'CREATE TABLE IF NOT EXISTS races ( id INTEGER PRIMARY KEY NOT NULL, name TEXT NOT NULL DEFAULT "", is_good INTEGER DEFAULT 0, health_picture_left INTEGER NOT NULL DEFAULT 0, health_picture_top INTEGER NOT NULL DEFAULT 0, ' + 'strength_picture_left INTEGER NOT NULL DEFAULT 0, strength_picture_top INTEGER NOT NULL DEFAULT 0, character_picture BLOB, other_picture BLOB, health_picture BLOB, strength_picture BLOB)',
+    'CREATE TABLE IF NOT EXISTS races ( id INTEGER PRIMARY KEY NOT NULL, name TEXT NOT NULL DEFAULT "", is_good INTEGER DEFAULT 0, character_name TEXT NOT NULL, health_picture_left INTEGER NOT NULL DEFAULT 0, health_picture_top INTEGER NOT NULL DEFAULT 0, ' + 'strength_picture_left INTEGER NOT NULL DEFAULT 0, strength_picture_top INTEGER NOT NULL DEFAULT 0, character_picture BLOB, other_picture BLOB, health_picture BLOB, strength_picture BLOB)',
     'CREATE TABLE IF NOT EXISTS settings ( name TEXT PRIMARY KEY NOT NULL DEFAULT "", value TEXT NOT NULL )',
     'CREATE TABLE IF NOT EXISTS sites ( id INTEGER PRIMARY KEY NOT NULL, time_of_creation TEXT NOT NULL DEFAULT "", title TEXT NOT NULL, picture_filename TEXT, content_picture BLOB, time TEXT NOT NULL, ' + 'twilight_cost INTEGER DEFAULT NULL, direction TEXT NOT NULL, TEXT TEXT, internal_comment TEXT)',
-    'CREATE TABLE IF NOT EXISTS times ( time TEXT PRIMARY KEY NOT NULL DEFAULT "", ordering INTEGER DEFAULT NULL)'
+    'CREATE TABLE IF NOT EXISTS times ( time TEXT PRIMARY KEY NOT NULL DEFAULT "", ordering INTEGER DEFAULT NULL)',
+    'CREATE TABLE IF NOT EXISTS card_types (id INTEGER PRIMARY KEY NOT NULL, name TEXT NOT NULL, is_character INTEGER NOT NULL, is_possession INTEGER NOT NULL, is_strength INTEGER NOT NULL, is_health INTEGER, ' + 'content_picture_max_width INTEGER, content_picture_max_height INTEGER, content_picture_left INTEGER NOT NULL, content_picture_top INTEGER NOT NULL, middle_title_left INTEGER NOT NULL, middle_title_width INTEGER NOT NULL)'
   );
   RACE_DEFAULTS: array[1..4] of String = (
-    'INSERT OR IGNORE INTO races (id, name, is_good, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (1, "Fellowship", 1, 34, 386, 33, 320, :character_picture, :other_picture, :strength_picture, :health_picture)',
-    'INSERT OR IGNORE INTO races (id, name, is_good, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (5, "Soft Drink", 0, 34, 386, 35, 320, :character_picture, :other_picture, :strength_picture, :health_picture)',
-    'INSERT OR IGNORE INTO races (id, name, is_good, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (6, "Strong Drink", 0, 36, 387, 36, 320, :character_picture, :other_picture, :strength_picture, :health_picture)',
-    'INSERT OR IGNORE INTO races (id, name, is_good, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (7, "Medium Drink", 0, 38, 388, 35, 320, :character_picture, :other_picture, :strength_picture, :health_picture)'
+    'INSERT OR IGNORE INTO races (id, name, is_good, character_name, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (1, "Fellowship", 1, "companion", 18, 370, 17, 304, :character_picture, :other_picture, :strength_picture, :health_picture)',
+    'INSERT OR IGNORE INTO races (id, name, is_good, character_name, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (5, "Soft Drink", 0, "minion", 18, 372, 19, 304, :character_picture, :other_picture, :strength_picture, :health_picture)',
+    'INSERT OR IGNORE INTO races (id, name, is_good, character_name, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (6, "Strong Drink", 0, "minion", 20, 371, 20, 304, :character_picture, :other_picture, :strength_picture, :health_picture)',
+    'INSERT OR IGNORE INTO races (id, name, is_good, character_name, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (7, "Medium Drink", 0, "minion", 22, 372, 19, 304, :character_picture, :other_picture, :strength_picture, :health_picture)'
   );
-  RACE_NAMES: array[1..4] of String = (
-    'Fellowship', 'Soft Drink', 'Strong Drink', 'Medium Drink'
+  RACE_NAMES: array[1..8] of String = (
+    'Fellowship', 'French', 'Russian', 'Other', 'Soft Drink', 'Strong Drink', 'Medium Drink', 'Cannabis'
   );
   RACE_PICTURES: array[1..4] of String = (
     'Character', 'Other', 'Strength', 'Health'
   );
-  SETTING_DEFAULTS: array[1..5] of String = (
-    'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteFirstTime", "14")',
-    'INSERT OR IGNORE INTO settings (name, value) VALUES ("CardThumbnailWidth", "100")',
+  SETTING_DEFAULTS: array[1..7] of String = (
     'INSERT OR IGNORE INTO settings (name, value) VALUES ("CardThumbnailHeight", "140")',
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("CardThumbnailWidth", "100")',
     'INSERT OR IGNORE INTO settings (name, value) VALUES ("DatabaseCreated", datetime("now"))',
-    'INSERT OR IGNORE INTO settings (name, value) VALUES ("DatabaseModified", datetime("now"))'
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("DatabaseModified", datetime("now"))',
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteContentPictureMaxHeight", "225")',
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteContentPictureMaxWidth", "395")',
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteFirstTime", "14")'
   );
   TIME_DEFAULTS: array[1..9] of String = (
     'INSERT OR IGNORE INTO times (time, ordering) VALUES ("14", 1)',
@@ -760,6 +799,12 @@ const
     'INSERT OR IGNORE INTO times (time, ordering) VALUES ("04", 8)',
     'INSERT OR IGNORE INTO times (time, ordering) VALUES ("07", 9)'
   );
+  CARD_TYPE_DEFAULTS: array[1..4] of String = (
+    'INSERT OR IGNORE INTO card_types (id, name, is_character, is_possession, is_strength, is_health, content_picture_max_width, content_picture_max_height, content_picture_left, content_picture_top, middle_title_left, middle_title_width) VALUES ' + '(1, "character", 1, 0, 1, 1, 285, 211, 37, 70, 48, 241)',
+    'INSERT OR IGNORE INTO card_types (id, name, is_character, is_possession, is_strength, is_health, content_picture_max_width, content_picture_max_height, content_picture_left, content_picture_top, middle_title_left, middle_title_width) VALUES ' + '(2, "condition", 0, 0, 1, 1, 254, 189, 75, 56, 84, 225)',
+    'INSERT OR IGNORE INTO card_types (id, name, is_character, is_possession, is_strength, is_health, content_picture_max_width, content_picture_max_height, content_picture_left, content_picture_top, middle_title_left, middle_title_width) VALUES ' + '(3, "event", 0, 0, 0, 0, 254, 189, 75, 56, 84, 225)',
+    'INSERT OR IGNORE INTO card_types (id, name, is_character, is_possession, is_strength, is_health, content_picture_max_width, content_picture_max_height, content_picture_left, content_picture_top, middle_title_left, middle_title_width) VALUES ' + '(4, "possession", 0, 1, 1, 1, 254, 189, 75, 56, 84, 225)'
+  );
 var
   I, J, K: Integer;
   TableDefaultsMap: IStrMap;
@@ -769,14 +814,14 @@ var
 begin
   TableDefaultsMap := TStrHashMap.Create();
   Defaults := TStringList.Create();
-  For I := Low(RACE_DEFAULTS) to High(RACE_DEFAULTS) do Defaults.Add(RACE_DEFAULTS[I]);
+  for I := Low(RACE_DEFAULTS) to High(RACE_DEFAULTS) do Defaults.Add(RACE_DEFAULTS[I]);
   TableDefaultsMap.PutValue('races', Defaults);
   Defaults := TStringList.Create();
-  For I := Low(SETTING_DEFAULTS) to High(SETTING_DEFAULTS) do Defaults.Add(SETTING_DEFAULTS[I]);
-  TableDefaultsMap.PutValue('settings', Defaults);
-  Defaults := TStringList.Create();
-  For I := Low(TIME_DEFAULTS) to High(TIME_DEFAULTS) do Defaults.Add(TIME_DEFAULTS[I]);
+  for I := Low(TIME_DEFAULTS) to High(TIME_DEFAULTS) do Defaults.Add(TIME_DEFAULTS[I]);
   TableDefaultsMap.PutValue('times',    Defaults);
+  Defaults := TStringList.Create();
+  for I := Low(CARD_TYPE_DEFAULTS) to High(CARD_TYPE_DEFAULTS) do Defaults.Add(CARD_TYPE_DEFAULTS[I]);
+  TableDefaultsMap.PutValue('card_types',    Defaults);
 
   for I := Low(TABLES) to High(TABLES) do begin
     DBResults := ExecuteSelect('SELECT name FROM sqlite_master WHERE name = :name', [TABLES[I]]);
@@ -800,6 +845,10 @@ begin
     end;
     SetLength(DBResults, 0, 0);
   end;
+  for I := Low(SETTING_DEFAULTS) to High(SETTING_DEFAULTS) do begin
+    sqlite3_exec_fast(DB, SETTING_DEFAULTS[I]);
+  end;
+
 end;
 
 

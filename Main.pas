@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   12.20.2003
- * @modified  10.11.2011
+ * @modified  11.11.2011
  *)
 unit Main;
 
@@ -20,15 +20,6 @@ type
     PageDeckEditor: TTabSheet;
     PageCardEditor: TTabSheet;
     PageSiteEditor: TTabSheet;
-    BackgroundPicture: TImage;
-    ContentPicture: TImage;
-    Strength: TLabel;
-    Health: TLabel;
-    TwilightCost: TLabel;
-    MiddleTitle: TLabel;
-    Title: TLabel;
-    Subtitle: TLabel;
-    Copyright: TLabel;
     ComboCardList: TComboBox;
     LabelComboCardList: TLabel;
     PageDatabase: TTabSheet;
@@ -69,11 +60,8 @@ type
     Removecardfromdeck1: TMenuItem;
     ButtonRemoveCardFromDeck: TButton;
     ButtonAddCardToDeck: TButton;
-    VerticalTitle: TPDJRotoLabel;
     Time: TLabel;
-    PanelCardCover: TPanel;
-    StrengthPicture: TImage;
-    HealthPicture: TImage;
+    PanelCardPicture: TPanel;
     PageCardList: TTabSheet;
     LabelGridCards: TLabel;
     ComboListRaces: TComboBox;
@@ -134,7 +122,6 @@ type
     LabelListDeckAllSites: TLabel;
     ButtonAddSiteToDeck: TButton;
     ButtonRemoveSiteFromDeck: TButton;
-    Text: TUniHTMLabel;
     SiteText: TUniHTMLabel;
     SaveImageDialog: TSaveDialog;
     ButtonSaveCardAs: TBitBtn;
@@ -145,8 +132,6 @@ type
     PreviewTitle: TLabel;
     PreviewSubtitle: TLabel;
     PreviewComment: TUniHTMLabel;
-    VerticalTitleLine1: TPDJRotoLabel;
-    VerticalTitleLine2: TPDJRotoLabel;
     OpenDatabaseDialog: TOpenDialog;
     OpenPictureDialog: TOpenPictureDialog;
     OpenPictureDialogButton: TSpeedButton;
@@ -171,17 +156,13 @@ type
     LabelEditSiteComment: TLabel;
     PanelDeckFields: TPanel;
     LabelDeckShadowStats: TLabel;
-    LabelDeckStudClubStats: TLabel;
+    LabelDeckFellowshipStats: TLabel;
     LabelDeckStats: TLabel;
     DeckTimeOfCreation: TLabel;
     EditDeckComment: TMemo;
     EditDeckTitle: TEdit;
     LabelEditDeckTitle: TLabel;
     LabelEditDeckComment: TLabel;
-    PanelCardCoverLeft: TPanel;
-    PanelCardCoverBottom: TPanel;
-    PanelSiteBottomCover: TPanel;
-    PanelSiteLeftCover: TPanel;
     InfoDatabaseRacesLabel: TLabel;
     InfoDatabaseRacesCaption: TLabel;
     InfoDatabaseModifiedLabel: TLabel;
@@ -204,6 +185,21 @@ type
     ButtonSavePicture: TBitBtn;
     ButtonSaveDeckImages: TBitBtn;
     ComboDeckList: TComboBox;
+    BackgroundPicture: TImage;
+    ContentPicture: TImage;
+    TwilightCost: TLabel;
+    Title: TLabel;
+    Subtitle: TLabel;
+    VerticalTitleLine1: TPDJRotoLabel;
+    VerticalTitleLine2: TPDJRotoLabel;
+    VerticalTitle: TPDJRotoLabel;
+    StrengthPicture: TImage;
+    HealthPicture: TImage;
+    Strength: TLabel;
+    Health: TLabel;
+    Text: TUniHTMLabel;
+    Copyright: TLabel;
+    MiddleTitle: TLabel;
     procedure ButtonSavePictureClick(Sender: TObject);
     procedure ExitButtonClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
@@ -281,8 +277,8 @@ type
     procedure ButtonSaveDeckImagesClick(Sender: TObject);
     procedure ComboDeckListChange(Sender: TObject);
   private
-    // Cleans the data fields in the card editor that correspond to the ID
-    procedure ClearFields(WinControl: TWinControl; ID: Integer);
+    // Clears the edit components under the control, except those matching the tag
+    procedure ClearFields(WinControl: TWinControl; TagNoClear: Integer);
     // Retrieves all the initial data from the database required for working
     procedure LoadData();
     // Checks whether the control's tag matches the specified tag.
@@ -479,7 +475,7 @@ begin
   else begin
     DataLists := TList.Create();
     DataLists.Add(Decks); DataLists.Add(Cards); DataLists.Add(Sites);
-    DataLists.Add(Races);
+    DataLists.Add(Races); DataLists.Add(CardTypes);
     for I := 0 to DataLists.Count - 1 do begin
       if DataLists.Items[I] <> nil then begin
         for J := 0 to TList(DataLists.Items[I]).Count - 1 do begin
@@ -495,6 +491,7 @@ begin
     FreeAndNil(Cards);
     FreeAndNil(Sites);
     FreeAndNil(Races);
+    FreeAndNil(CardTypes);
     //FreeAndNil(Settings); Must not be freed, yet leaks no memory?
     //FreeAndNil(ComboCardListMap); Must not be freed, yet leaks no memory?
     //FreeAndNil(ComboListDecksMap); Must not be freed, yet leaks no memory?
@@ -604,7 +601,7 @@ begin
   if (Choice = mrOk) then begin
     if (GetCheckSavingResult(True, False, False) <> mrCancel) then begin
       CurrentCard := TCard.Create();
-      CurrentCard.CardType := NewCardComboCardType.Items[NewCardComboCardType.ItemIndex];
+      CurrentCard.CardType := GetCardTypeByName(NewCardComboCardType.Items[NewCardComboCardType.ItemIndex]);
       CurrentCard.Race := GetRaceByName(NewCardComboRace.Items[NewCardComboRace.ItemIndex]);
       ChangeCardEditorInterface(CurrentCard);
       SetCardDataToInterface(CurrentCard);
@@ -618,8 +615,8 @@ begin
 end;
 
 
-// Cleans the data fields in the card editor that correspond to the ID
-procedure TMainForm.ClearFields(WinControl: TWinControl; ID: Integer);
+// Clears the edit components under the control, except those matching the tag
+procedure TMainForm.ClearFields(WinControl: TWinControl; TagNoClear: Integer);
 var I: Integer;
     CurrentControl: TControl;
 begin
@@ -627,8 +624,8 @@ begin
     CurrentControl := WinControl.Controls[I];
     // If the control is a TPanel, recurse into its controls
     if (CurrentControl is TPanel) then begin
-      ClearFields(CurrentControl as TWinControl, ID);
-    end else if (MatchesTag(CurrentControl, ID)) then begin
+      ClearFields(CurrentControl as TWinControl, TagNoClear);
+    end else if not (MatchesTag(CurrentControl, TagNoClear)) then begin
       if (CurrentControl is TEdit) then begin
         (CurrentControl as TEdit).Text := ''
       end else if (CurrentControl is TMemo) then begin
@@ -688,7 +685,7 @@ begin
     Database.Store(CurrentCard);
     CurrentCard.ShowName := '';
     CurrentCard.OriginalRace := nil;
-    CurrentCard.OriginalCardType := '';
+    CurrentCard.OriginalCardType := nil;
     FreeAndNil(CurrentCard.OriginalContentPicture);
     CurrentCard.IsContentPictureChanged := False;
     AddCardToVariables(CurrentCard);
@@ -741,7 +738,7 @@ procedure TMainForm.SetInterfaceDataToCard(Card: TCard);
 begin
   if (Length(EditTwilightCost.Text) = 0) then
     raise Exception.Create('Error: the twilight cost must be a valid number.');
-  Card.CardType := ComboCardType.Items[ComboCardType.ItemIndex];
+  Card.CardType := GetCardTypeByName(ComboCardType.Items[ComboCardType.ItemIndex]);
   Card.Race := GetRaceByName(ComboRace.Items[ComboRace.ItemIndex]);
   Card.Title := EditTitle.Text;
   Card.Subtitle := '';
@@ -749,16 +746,16 @@ begin
   Card.PossessionType := '';
   Card.Strength := '';
   Card.Health := '';
-  if (Card.CardType = CARD_TYPE_CHARACTER) then begin
+  if (Card.CardType.IsCharacter) then begin
     Card.Subtitle := EditSubtitle.Text;
     if (not Card.Race.IsGood) then
       Card.Time := ComboTime.Text;
   end;
-  if (Card.CardType = CARD_TYPE_POSSESSION) then
+  if (Card.CardType.IsPossession) then
     Card.PossessionType := EditPossessionType.Text;
   Card.TwilightCost := StrToInt(EditTwilightCost.Text);
   Card.IsUnique := CheckIsUnique.Checked;
-  if ((Card.CardType = CARD_TYPE_POSSESSION) or (Card.CardType = CARD_TYPE_CHARACTER)) then begin
+  if ((Card.CardType.IsCharacter) or (Card.CardType.IsPossession)) then begin
     Card.Strength := EditStrength.Text;
     Card.Health := EditHealth.Text;
   end;
@@ -790,9 +787,9 @@ end;
 // Sets the data in the card to the card editor interface
 procedure TMainForm.SetCardDataToInterface(Card: TCard);
 begin
-  ClearFields(PageCardEditor, TAG_NEW_CARD);
+  ClearFields(PageCardEditor, TAG_NOCLEAR);
   SelectComboItem(ComboRace, Card.Race.Name);
-  SelectComboItem(ComboCardType, Card.CardType);
+  SelectComboItem(ComboCardType, Card.CardType.Name);
   ChangeCardEditorInterface(Card);
   EditTitle.Text := Card.Title;
   EditSubtitle.Text := Card.Subtitle;
@@ -821,13 +818,13 @@ end;
 // Sets the data in the site to the site editor interface
 procedure TMainForm.SetSiteDataToInterface(Site: TSite);
 begin
-  ClearFields(PageSiteEditor, TAG_NEW_SITE);
+  ClearFields(PageSiteEditor, TAG_NOCLEAR);
   EditSiteTitle.Text := Site.Title;
   EditSiteTwilightCost.Text := IntToStr(Site.TwilightCost);
   if (Length(Site.Time) > 0) then
     SelectComboItem(ComboSiteTimes, Site.Time)
   else
-    SelectComboItem(ComboSiteTimes, GetSetting('SiteFirstTime'));
+    SelectComboItem(ComboSiteTimes, Times[0]);
   if (Length(Site.Direction) > 0) then
     SelectComboItem(ComboSiteDirections, Site.Direction)
   else
@@ -851,6 +848,7 @@ end;
 procedure TMainForm.LoadData();
 var I: Integer;
     Race: TRace;
+    CardType: TCardType;
 begin
   CurrentDeck := nil;
   CurrentCard := nil;
@@ -861,7 +859,8 @@ begin
   Races := Database.RetrieveRaces();
   Sites := Database.RetrieveSites();
   Settings := Database.RetrieveSettings();
-  
+  CardTypes := Database.RetrieveCardTypes();
+
   ComboRace.Items.Clear();
   NewCardComboRace.Items.Clear();
   ComboListRaces.Items.Clear();
@@ -890,10 +889,11 @@ begin
   ComboListCardTypes.Items.Clear();
   ComboListCardTypes.Items.Add(CARD_LIST_FILTER_TYPES_ALL);
   ComboListCardTypes.ItemIndex := 0;
-  for I := Low(CARD_TYPES) to High(CARD_TYPES) do begin
-    ComboCardType.Items.Add(CARD_TYPES[I]);
-    NewCardComboCardType.Items.Add(CARD_TYPES[I]);
-    ComboListCardTypes.Items.Add(CARD_TYPES[I]);
+  for I := 0 to CardTypes.Count - 1 do begin
+    CardType := CardTypes[I];
+    ComboCardType.Items.Add(CardType.Name);
+    NewCardComboCardType.Items.Add(CardType.Name);
+    ComboListCardTypes.Items.Add(CardType.Name);
   end;
   Cards := Database.RetrieveCards();
   Decks := Database.RetrieveDecks();
@@ -988,32 +988,29 @@ begin
 end;
 
 
-// Changes the interface for the type (shadow event, stud club possession etc)
+// Changes the interface for the type (shadow event, fellowship possession etc)
 procedure TMainForm.ChangeCardEditorInterface(var Card: TCard);
 begin
-  //BackgroundPicture.Picture := nil;
   StrengthPicture.Visible := False;
   HealthPicture.Visible := False;
-  if (Card.CardType = CARD_TYPE_CHARACTER) then begin
+  ContentPicture.Left := Card.CardType.ContentPictureLeft;
+  ContentPicture.Top := Card.CardType.ContentPictureTop;
+  MiddleTitle.Left := Card.CardType.MiddleTitleLeft;
+  MiddleTitle.Width := Card.CardType.MiddleTitleWidth;
+  if (Card.CardType.IsCharacter) then begin
     BackgroundPicture.Picture.Assign(Card.Race.CharacterPicture);
-    ContentPicture.Left := 53;
-    ContentPicture.Top := 86;
-    MiddleTitle.Left := 64;
-    MiddleTitle.Width := 257;
   end else begin
     BackgroundPicture.Picture.Assign(Card.Race.OtherPicture);
-    ContentPicture.Left := 91;
-    ContentPicture.Top := 72;
-    MiddleTitle.Left := 100;
-    MiddleTitle.Width := 241;
-    if (Card.CardType = CARD_TYPE_POSSESSION) then begin
-      StrengthPicture.Picture.Assign(Card.Race.StrengthPicture);
-      HealthPicture.Picture.Assign(Card.Race.HealthPicture);
-      StrengthPicture.Left := Card.Race.StrengthPictureLeft;
-      StrengthPicture.Top := Card.Race.StrengthPictureTop;
-      HealthPicture.Left := Card.Race.HealthPictureLeft;
-      HealthPicture.Top := Card.Race.HealthPictureTop;
-    end;
+  end;
+  if (Card.CardType.IsStrength) then begin
+    StrengthPicture.Picture.Assign(Card.Race.StrengthPicture);
+    StrengthPicture.Left := Card.Race.StrengthPictureLeft;
+    StrengthPicture.Top := Card.Race.StrengthPictureTop;
+  end;
+  if (Card.CardType.IsHealth) then begin
+    HealthPicture.Picture.Assign(Card.Race.HealthPicture);
+    HealthPicture.Left := Card.Race.HealthPictureLeft;
+    HealthPicture.Top := Card.Race.HealthPictureTop;
   end;
   ChangeCardEditorVisibility(PageCardEditor, Card);
 end;
@@ -1021,9 +1018,19 @@ end;
 
 // Changes the visibility of the card editor interface components
 procedure TMainForm.ChangeCardEditorVisibility(Control: TWinControl; var Card: TCard);
-var I: Integer;
-    CurrentControl: TControl;
 begin
+  LabelEditTime.Visible := (not Card.Race.IsGood) and (Card.CardType.IsCharacter);
+  LabelEditTime.FocusControl.Visible := LabelEditTime.Visible;
+  LabelEditStrength.Visible := Card.CardType.IsStrength;
+  LabelEditStrength.FocusControl.Visible := LabelEditStrength.Visible;
+  LabelEditHealth.Visible := Card.CardType.IsHealth;
+  LabelEditHealth.FocusControl.Visible := LabelEditHealth.Visible;
+  LabelEditSubtitle.Visible := Card.CardType.IsCharacter;
+  LabelEditSubtitle.FocusControl.Visible := LabelEditSubtitle.Visible;
+  LabelEditPossessionType.Visible := Card.CardType.IsPossession;
+  LabelEditPossessionType.FocusControl.Visible := LabelEditPossessionType.Visible;
+
+{
   for I := 0 to Control.ControlCount - 1 do begin
     CurrentControl := (Control.Controls[I] as TControl);
     // If the control is a TPanel, recurse into its controls
@@ -1038,6 +1045,7 @@ begin
          CurrentControl.Visible := not Card.Race.IsGood;
     end
   end;
+}
 end;
 
 
@@ -1046,13 +1054,9 @@ end;
 procedure TMainForm.LoadCard(var Card: TCard);
 var I: Integer;
     TempCard: TCard;
-    MainFormEnabled: Boolean;
 begin
-  MainFormEnabled := MainForm.Enabled;
   try
     IgnoreCardChanges := True;
-    MainForm.Enabled := False;
-    if (MainFormEnabled) then MainForm.Cursor := crHourGlass;
     SetCardDataToInterface(Card);
     PreviewCard(Card);
     for I := 0 to ComboCardList.Items.Count - 1 do begin
@@ -1063,9 +1067,7 @@ begin
       end;
     end;
   finally
-    if (MainFormEnabled) then MainForm.Cursor := crDefault;
-    MainForm.Enabled := MainFormEnabled;
-    PanelCardCover.Visible := False;
+    PanelCardPicture.Visible := True;
     IgnoreCardChanges := False;
     SetCardChanged(False);
   end;
@@ -1081,18 +1083,20 @@ begin
   // Always compare before replacing values, to avoid flickering
   try
     TwilightCost.Caption := EditTwilightCost.Text;
-    if ((Card.CardType = CARD_TYPE_CHARACTER)
-        or (Card.CardType = CARD_TYPE_POSSESSION)) then begin
+    if ((Card.CardType.IsStrength)) then begin
       if (Strength.Caption <> EditStrength.Text) then Strength.Caption := EditStrength.Text;
-      if (Health.Caption <> EditHealth.Text) then Health.Caption := EditHealth.Text;
     end else begin
       Strength.Caption := '';
+    end;
+    if ((Card.CardType.IsHealth)) then begin
+      if (Health.Caption <> EditHealth.Text) then Health.Caption := EditHealth.Text;
+    end else begin
       Health.Caption := '';
     end;
     TimeTemp := '';
     Temp := AnsiUpperCase(EditTitle.Text);
     if (CheckIsUnique.Checked) then Temp := UNIQUE_SYMBOL + ' ' + Temp;
-    if (Card.CardType = CARD_TYPE_CHARACTER) then begin
+    if (Card.CardType.IsCharacter) then begin
       VerticalTitle.Visible := False;
       VerticalTitleLine1.Visible := False;
       VerticalTitleLine2.Visible := False;
@@ -1148,17 +1152,13 @@ begin
     end;
     if Time.Caption <> TimeTemp then Time.Caption := TimeTemp;
     Temp := '';
-    if (Card.CardType = CARD_TYPE_CHARACTER) then begin
+    if (Card.CardType.IsCharacter) then begin
       if (Subtitle.Caption <> AnsiUpperCase(EditSubtitle.Text)) then Subtitle.Caption := AnsiUpperCase(EditSubtitle.Text);
-      if (Card.Race.IsGood) then
-        Temp := AnsiUpperCase('companion')
-      else
-        Temp := AnsiUpperCase('minion');
-      Temp := Temp + ' ' + MIDDLE_DOT + ' ' +
-              AnsiUpperCase(Card.Race.Name);
-    end else if (Card.CardType = CARD_TYPE_POSSESSION) then begin
+      Temp := AnsiUpperCase(Card.Race.CharacterName) + ' ' +
+              MIDDLE_DOT + ' ' + AnsiUpperCase(Card.Race.Name);
+    end else if (Card.CardType.IsPossession) then begin
       Subtitle.Caption := '';
-      Temp := AnsiUpperCase(Card.CardType);
+      Temp := AnsiUpperCase(Card.CardType.Name);
       if (Length(EditPossessionType.Text) > 0) then
         Temp := Temp + ' ' + MIDDLE_DOT + ' ' +
                 AnsiUpperCase(EditPossessionType.Text);
@@ -1166,7 +1166,8 @@ begin
       StrengthPicture.Visible := (Length(EditStrength.Text) > 0);
       HealthPicture.Visible := (Length(EditHealth.Text) > 0);
     end else begin
-      Temp := AnsiUpperCase(Card.CardType);
+      Subtitle.Caption := '';
+      Temp := AnsiUpperCase(Card.CardType.Name);
     end;
     if (MiddleTitle.Caption <> Temp) then MiddleTitle.Caption := Temp;
 
@@ -1229,7 +1230,7 @@ begin
     end;
     SiteTitle.Caption := AnsiUpperCase(EditSiteTitle.Text);
     SiteTime.Caption := ComboSiteTimes.Text;
-    if (SiteTime.Caption = GetSetting('SiteFirstTime')) then begin
+    if (SiteTime.Caption = Times[0]) then begin
       SiteTwilightCostPicture.Visible := False;
       SiteTwilightCost.Caption := '';
     end else begin
@@ -1289,14 +1290,10 @@ end;
 procedure TMainForm.LoadSite(var Site: TSite);
 var I: Integer;
     TempSite: TSite;
-    MainFormEnabled: Boolean;
 begin
-  MainFormEnabled := MainForm.Enabled;
   try
     IgnoreSiteChanges := True;
     PanelSitePicture.Visible := False;
-    MainForm.Enabled := False;
-    if (MainFormEnabled) then MainForm.Cursor := crHourGlass;
     SetSiteDataToInterface(Site);
     PreviewSite(Site);
     for I := 0 to ComboSiteList.Items.Count - 1 do begin
@@ -1307,8 +1304,6 @@ begin
       end;
     end;
   finally
-    if (MainFormEnabled) then MainForm.Cursor := crDefault;
-    MainForm.Enabled := MainFormEnabled;
     PanelSitePicture.Visible := True;
     IgnoreSiteChanges := False;
     SetSiteChanged(False);
@@ -1330,13 +1325,10 @@ end;
 
 procedure TMainForm.ComboCardListChange(Sender: TObject);
 var Card: TCard;
-    MainFormEnabled: Boolean;
 begin
   if not IgnoreCardChanges then begin
     CardLoadSection.Enter();
-    MainFormEnabled := MainForm.Enabled;
     try
-      MainForm.Enabled := False;
       Card := ComboCardListMap.GetValue(IntToStr(ComboCardList.ItemIndex)) as TCard;
       if ((Card <> CurrentCard) and (GetCheckSavingResult(True, False, False) <> mrCancel)) then begin
         PageCardEditor.SetFocus();
@@ -1345,7 +1337,6 @@ begin
         ComboCardList.SetFocus();
       end;
     finally
-      MainForm.Enabled := MainFormEnabled;
       CardLoadSection.Leave();
     end;
   end;
@@ -1364,7 +1355,7 @@ begin
     FreeAndNil(CurrentCard);
     CardsUpdate();
     DecksUpdate(); // To update the card counts in deck lists
-    PanelCardCover.Visible := True;
+    PanelCardPicture.Visible := False;
     PanelCardFields.Visible := False;
     ButtonSaveCard.Enabled := False;
     ButtonDeleteCard.Enabled := False;
@@ -1458,7 +1449,7 @@ begin
     ListDeckSites.Enabled := False;
     LabelDeckStats.Caption := '';
     LabelDeckShadowStats.Caption := '';
-    LabelDeckStudClubStats.Caption := '';
+    LabelDeckFellowshipStats.Caption := '';
     ButtonAddCardToDeck.Enabled := False;
     ButtonRemoveCardFromDeck.Enabled := False;
     ButtonAddSiteToDeck.Enabled := False;
@@ -1540,56 +1531,43 @@ end;
 
 // Fills in the deck statistics controls
 procedure TMainForm.ShowDeckStats();
-var I: Integer;
-    ShadowCharacters, ShadowConditions, ShadowPossessions, ShadowEvents: Integer;
-    StudClubCharacters, StudClubConditions, StudClubPossessions, StudClubEvents: Integer;
-    ShadowCards, StudClubCards: Integer;
+var I, J: Integer;
+    FellowshipCards, ShadowCards: array of Integer; // counts for each card type
+    FellowshipTotal, ShadowTotal: Integer;
 begin
-  ShadowCharacters := 0;
-  ShadowConditions := 0;
-  ShadowPossessions := 0;
-  ShadowEvents := 0;
-  StudClubCharacters := 0;
-  StudClubConditions := 0;
-  StudClubPossessions := 0;
-  StudClubEvents := 0;
-  ShadowCards := 0;
-  StudClubCards := 0;
+  FellowshipTotal := 0;
+  ShadowTotal := 0;
+  SetLength(FellowshipCards, CardTypes.Count);
+  SetLength(ShadowCards, CardTypes.Count);
   for I := 0 to CurrentDeck.Cards.Count - 1 do
     if (not TDeckCard(CurrentDeck.Cards.Items[I]).IsDeleted) then
       with (TDeckCard(CurrentDeck.Cards[I]).Card) do begin
         if (Race.IsGood) then begin
-          Inc(StudClubCards);
-          if (CardType = CARD_TYPE_CHARACTER)
-            then Inc(StudClubCharacters)
-          else if (CardType = CARD_TYPE_CONDITION)
-            then Inc(StudClubConditions)
-          else if (CardType = CARD_TYPE_EVENT)
-            then Inc(StudClubEvents)
-          else if (CardType = CARD_TYPE_POSSESSION)
-            then Inc(StudClubPossessions);
+          Inc(FellowshipTotal);
+          for J := 0 to CardTypes.Count - 1 do
+            if TCardType(CardTypes.Items[J]) = CardType then
+              Inc(FellowshipCards[J]);
         end else begin
-          Inc(ShadowCards);
-          if (CardType = CARD_TYPE_CHARACTER)
-            then Inc(ShadowCharacters)
-          else if (CardType = CARD_TYPE_CONDITION)
-            then Inc(ShadowConditions)
-          else if (CardType = CARD_TYPE_EVENT)
-            then Inc(ShadowEvents)
-          else if (CardType = CARD_TYPE_POSSESSION)
-            then Inc(ShadowPossessions);
+          Inc(ShadowTotal);
+          for J := 0 to CardTypes.Count - 1 do
+            if TCardType(CardTypes.Items[J]) = CardType then
+              Inc(ShadowCards[J]);
         end;
       end;
   LabelDeckStats.Caption :=
-    Format('%d cards, %d sites total.', [ShadowCards + StudClubCards, CurrentDeck.GetSitesCount()]);
-  LabelDeckShadowStats.Caption :=
-    Format('%d Shadow cards: %s %d minions %s %d conditions %s %d possessions %s %d events',
-           [ShadowCards, NEW_LINE, ShadowCharacters, NEW_LINE,
-            ShadowConditions, NEW_LINE, ShadowPossessions, NEW_LINE, ShadowEvents]);
-  LabelDeckStudClubStats.Caption :=
-    Format('%d Fellowship cards: %s %d companions %s %d conditions %s %d possessions %s %d events',
-           [StudClubCards, NEW_LINE, StudClubCharacters, NEW_LINE,
-            StudClubConditions, NEW_LINE, StudClubPossessions, NEW_LINE, StudClubEvents]);
+    Format('%d cards, %d sites total.', [ShadowTotal + FellowshipTotal, CurrentDeck.GetSitesCount()]);
+  LabelDeckFellowshipStats.Caption := Format('%d Fellowship cards:', [FellowshipTotal]);
+  LabelDeckShadowStats.Caption := Format('%d Shadow cards:', [ShadowTotal]);
+  for I := 0 to CardTypes.Count - 1 do begin
+    LabelDeckFellowshipStats.Caption := LabelDeckFellowshipStats.Caption +
+      Format('%s %d %s%s',
+             [NEW_LINE, FellowshipCards[I], TCardType(CardTypes[I]).Name,
+              IfThen(FellowshipCards[I] <> 1, 's', '')]);
+    LabelDeckShadowStats.Caption := LabelDeckShadowStats.Caption +
+      Format('%s %d %s%s',
+             [NEW_LINE, ShadowCards[I], TCardType(CardTypes[I]).Name,
+              IfThen(ShadowCards[I] <> 1, 's', '')]);
+  end;
 end;
 
 
@@ -1712,9 +1690,9 @@ end;
 
 procedure TMainForm.ComboCardTypeChange(Sender: TObject);
 begin
-  if (Length(CurrentCard.OriginalCardType) = 0) then
+  if (CurrentCard.OriginalCardType = nil) then
     CurrentCard.OriginalCardType := CurrentCard.CardType;
-  CurrentCard.CardType := ComboCardType.Items[ComboCardType.ItemIndex];
+  CurrentCard.CardType := GetCardTypeByName(ComboCardType.Items[ComboCardType.ItemIndex]);
   ChangeCardEditorInterface(CurrentCard);
   PreviewCard(CurrentCard, False);
   SetCardChanged(True);
@@ -1737,7 +1715,7 @@ begin
       NewCard.Free();
     end else begin
       EditTitle.Text := Temp;
-      if (Length(CurrentCard.OriginalCardType) > 0) then
+      if (CurrentCard.OriginalCardType <> nil) then
         CurrentCard.CardType := CurrentCard.OriginalCardType;
       if (CurrentCard.OriginalRace <> nil) then
         CurrentCard.Race := CurrentCard.OriginalRace;
@@ -1754,7 +1732,7 @@ begin
         CurrentCard.OriginalContentPicture := nil;
       end;
       CurrentCard.IsContentPictureChanged := False;
-      CurrentCard.OriginalCardType := '';
+      CurrentCard.OriginalCardType := nil;
       CurrentCard.OriginalRace := nil;
       CurrentCard := NewCard;
       FreeAndNil(CurrentCard.Thumbnail); // Clear thumbnail to regenerate
@@ -1773,7 +1751,7 @@ begin
   for I := 0 to Cards.Count - 1 do
     if (TCard(Cards.Items[I]).ID <> Card.ID) then
       if (AnsiUpperCase(TCard(Cards.Items[I]).Title) = AnsiUpperCase(Card.Title)) then begin
-        if (Card.CardType <> CARD_TYPE_CHARACTER) then begin
+        if (Card.CardType.IsCharacter) then begin
           Result := False;
           Break;
         end else if (TCard(Cards.Items[I]).Subtitle = Card.Subtitle) then begin
@@ -1815,7 +1793,7 @@ end;
 
 procedure TMainForm.ButtonUndoCardChangesClick(Sender: TObject);
 begin
-  if (Length(CurrentCard.OriginalCardType) > 0) then
+  if (CurrentCard.OriginalCardType <> nil) then
     CurrentCard.CardType := CurrentCard.OriginalCardType;
   if (CurrentCard.OriginalRace <> nil) then
     CurrentCard.Race := CurrentCard.OriginalRace;
@@ -1827,7 +1805,7 @@ begin
     else
       ContentPicture.Picture.Assign(TransparentPixel)
   end;
-  CurrentCard.OriginalCardType := '';
+  CurrentCard.OriginalCardType := nil;
   CurrentCard.OriginalRace := nil;
   CurrentCard.OriginalContentPicture := nil;
   SetCardDataToInterface(CurrentCard);
@@ -1932,7 +1910,7 @@ end;
 // Resets the deck editor interface, disabling controls etc
 procedure TMainForm.ResetCardEditor(ClearComboList: Boolean = True);
 begin
-  PanelCardCover.Visible := True;
+  PanelCardPicture.Visible := False;
   PanelCardFields.Visible := False;
   if (ClearComboList) then ComboCardList.Items.Clear();
   ButtonSaveCard.Enabled := False;
@@ -1981,7 +1959,7 @@ begin
   ButtonSaveDeckAs.Enabled := False;
   ButtonDeleteDeck.Enabled := False;
   ButtonUndoDeckChanges.Enabled := False;
-  LabelDeckStudClubStats.Caption := '';
+  LabelDeckFellowshipStats.Caption := '';
   LabelDeckShadowStats.Caption := '';
   LabelDeckStats.Caption := '';
   ListDeckCards.Enabled := False;
@@ -2017,7 +1995,7 @@ begin
           Continue;
       end;
       if (Length(ListCardsFilterType) > 0) then begin
-        if (Card.CardType <> ListCardsFilterType) then
+        if (Card.CardType.Name <> ListCardsFilterType) then
           Continue;
       end;
       if (Length(ListCardsFilterTime) > 0) then begin
@@ -2042,7 +2020,7 @@ begin
     ListItem.SubItems.Add(Card.Strength);
     ListItem.SubItems.Add(Card.Health);
     ListItem.SubItems.Add(Card.Race.Name);
-    ListItem.SubItems.Add(Card.CardType);
+    ListItem.SubItems.Add(Card.CardType.Name);
     ListItem.SubItems.Add(Card.Time);
     ListItem.SubItems.Add(Card.TimeOfCreation);
     ListItem.Data := Card;
@@ -2077,7 +2055,7 @@ begin
     if (Length(Card.Subtitle) > 0) then
       ListItem.Caption := ListItem.Caption + ', ' + Card.Subtitle;
     ListItem.SubItems.Add(Card.Race.Name);
-    ListItem.SubItems.Add(Card.CardType);
+    ListItem.SubItems.Add(Card.CardType.Name);
     ListItem.Data := Card;
   end;
   ListDeckAllCards.CustomSort(nil, 0);
@@ -2100,7 +2078,7 @@ begin
         if (Length(Card.Card.Subtitle) > 0) then
           ListItem.Caption := ListItem.Caption + ', ' + Card.Card.Subtitle;
         ListItem.SubItems.Add(Card.Card.Race.Name);
-        ListItem.SubItems.Add(Card.Card.CardType);
+        ListItem.SubItems.Add(Card.Card.CardType.Name);
         ListItem.Data := Card;
       end;
     end;
@@ -2223,8 +2201,8 @@ begin
     Field1 := Card1.Race.Name;
     Field2 := Card2.Race.Name;
   end else if (SortInfo.SortColumn = CARD_LIST_COLUMN_TYPE) then begin
-    Field1 := Card1.CardType;
-    Field2 := Card2.CardType;
+    Field1 := Card1.CardType.Name;
+    Field2 := Card2.CardType.Name;
   end else if (SortInfo.SortColumn = CARD_LIST_COLUMN_TIME) then begin
     Field1 := Card1.Time;
     Field2 := Card2.Time;
@@ -2381,20 +2359,13 @@ end;
 
 procedure TMainForm.ComboSiteListChange(Sender: TObject);
 var Site: TSite;
-    MainFormEnabled: Boolean;
 begin
-  MainFormEnabled := MainForm.Enabled;
-  try
-    MainForm.Enabled := False;
-    Site := ComboSiteListMap.GetValue(IntToStr(ComboSiteList.ItemIndex)) as TSite;
-    if ((Site <> CurrentSite) and (GetCheckSavingResult(False, False, True) <> mrCancel)) then begin
-      PageSiteEditor.SetFocus();
-      CurrentSite := Site;
-      LoadSite(CurrentSite);
-      ComboSiteList.SetFocus();
-    end;
-  finally
-    MainForm.Enabled := MainFormEnabled;
+  Site := ComboSiteListMap.GetValue(IntToStr(ComboSiteList.ItemIndex)) as TSite;
+  if ((Site <> CurrentSite) and (GetCheckSavingResult(False, False, True) <> mrCancel)) then begin
+    PageSiteEditor.SetFocus();
+    CurrentSite := Site;
+    LoadSite(CurrentSite);
+    ComboSiteList.SetFocus();
   end;
 end;
 
@@ -2789,7 +2760,7 @@ begin
           // Free old data
           DataLists := TList.Create();
           DataLists.Add(Cards); DataLists.Add(Sites); DataLists.Add(Decks);
-          DataLists.Add(Races);
+          DataLists.Add(Races); DataLists.Add(CardTypes);
           for I := 0 to DataLists.Count - 1 do begin
             if (DataLists.Items[I] <> nil) then begin
               for J := 0 to TList(DataLists.Items[I]).Count - 1 do begin
@@ -2844,13 +2815,13 @@ begin
      ContentPicture.Picture.Assign(CurrentCard.ContentPicture);
      ResizeRatioX := 1;
      ResizeRatioY := 1;
-     if Picture.Width <> CARD_CONTENT_PICTURE_MAX_WIDTH then begin
-       ResizeRatioX := Picture.Width / CARD_CONTENT_PICTURE_MAX_WIDTH;
-       ContentPicture.Picture.Bitmap.Width := CARD_CONTENT_PICTURE_MAX_WIDTH;
+     if Picture.Width <> CurrentCard.CardType.ContentPictureMaxWidth then begin
+       ResizeRatioX := Picture.Width / CurrentCard.CardType.ContentPictureMaxWidth;
+       ContentPicture.Picture.Bitmap.Width := CurrentCard.CardType.ContentPictureMaxWidth;
      end;
-     if Picture.Height <> CARD_CONTENT_PICTURE_MAX_HEIGHT then begin
-       ResizeRatioY := Picture.Height / CARD_CONTENT_PICTURE_MAX_HEIGHT;
-       ContentPicture.Picture.Bitmap.Height := CARD_CONTENT_PICTURE_MAX_HEIGHT;
+     if Picture.Height <> CurrentCard.CardType.ContentPictureMaxHeight then begin
+       ResizeRatioY := Picture.Height / CurrentCard.CardType.ContentPictureMaxHeight;
+       ContentPicture.Picture.Bitmap.Height := CurrentCard.CardType.ContentPictureMaxHeight;
      end;
      EditPictureFilename.Text := UrlDecode(ExtractFileNameBetter(Location));
      SetCardChanged(True);
@@ -2895,13 +2866,13 @@ begin
      SiteContentPicture.Picture.Assign(CurrentSite.ContentPicture);
      ResizeRatioX := 1;
      ResizeRatioY := 1;
-     if Picture.Width <> SITE_CONTENT_PICTURE_MAX_WIDTH then begin
-       ResizeRatioX := Picture.Width / SITE_CONTENT_PICTURE_MAX_WIDTH;
-       SiteContentPicture.Picture.Bitmap.Width := SITE_CONTENT_PICTURE_MAX_WIDTH;
+     if Picture.Width <> GetSettingInt('SiteContentPictureMaxWidth') then begin
+       ResizeRatioX := Picture.Width / GetSettingInt('SiteContentPictureMaxWidth');
+       SiteContentPicture.Picture.Bitmap.Width := GetSettingInt('SiteContentPictureMaxWidth');
      end;
-     if Picture.Height <> SITE_CONTENT_PICTURE_MAX_HEIGHT then begin
-       ResizeRatioY := Picture.Height / SITE_CONTENT_PICTURE_MAX_HEIGHT;
-       SiteContentPicture.Picture.Bitmap.Height := SITE_CONTENT_PICTURE_MAX_HEIGHT;
+     if Picture.Height <> GetSettingInt('SiteContentPictureMaxHeight') then begin
+       ResizeRatioY := Picture.Height / GetSettingInt('SiteContentPictureMaxHeight');
+       SiteContentPicture.Picture.Bitmap.Height := GetSettingInt('SiteContentPictureMaxHeight');
      end;
      EditSitePictureFilename.Text := UrlDecode(ExtractFileNameBetter(Location));
      SetSiteChanged(True);
@@ -3084,11 +3055,12 @@ begin
     if Directory <> '' then begin
       LastExportDirectory := Directory;
       MessageDlg(Format('Saving %d cards to folder "%s".' + #13#10#13#10 + 'The program will be unresponsive for a few seconds.', [Cards.Count, Directory]), mtInformation, [mbOk], 0);
-      MainForm.Enabled := False;
       CardsCount := BatchSaveImages(Cards, Directory);
-      MainForm.Enabled := True;
       BringApplicationToTop();
-      if (CardsCount > 0) then MessageDlg(Format('Saved %d card images to folder "%s".', [CardsCount, Directory]), mtInformation, [mbOk], 0);
+      if (CardsCount > 0) then begin
+        Beep();
+        MessageDlg(Format('Saved %d card images to folder "%s".', [CardsCount, Directory]), mtInformation, [mbOk], 0);
+      end;
     end;
   end;
 end;
@@ -3108,11 +3080,12 @@ begin
     if Directory <> '' then begin
       LastExportDirectory := Directory;
       MessageDlg(Format('Saving %d sites to folder "%s".' + #13#10#13#10 + 'The program will be unresponsive for a few seconds.', [Sites.Count, Directory]), mtInformation, [mbOk], 0);
-      MainForm.Enabled := False;
       SitesCount := BatchSaveImages(Sites, Directory);
-      MainForm.Enabled := True;
       BringApplicationToTop();
-      if (SitesCount > 0) then MessageDlg(Format('Saved %d site images to folder "%s".', [SitesCount, Directory]), mtInformation, [mbOk], 0);
+      if (SitesCount > 0) then begin
+        Beep();
+        MessageDlg(Format('Saved %d site images to folder "%s".', [SitesCount, Directory]), mtInformation, [mbOk], 0);
+      end;
     end;
   end;
 end;
@@ -3132,7 +3105,6 @@ begin
     if Directory <> '' then begin
       LastExportDirectory := Directory;
       MessageDlg(Format('Saving %d cards and %d sites to folder "%s".' + #13#10#13#10 + 'The program will be unresponsive for a few seconds.', [CurrentDeck.GetCardsCount(), CurrentDeck.GetSitesCount(), Directory]), mtInformation, [mbOK], 0);
-      MainForm.Enabled := False;
       Items := TList.Create();
       for I := 0 to CurrentDeck.Cards.Count - 1 do begin
         DeckCard := CurrentDeck.Cards.Items[I];
@@ -3150,9 +3122,11 @@ begin
         SitesCount := BatchSaveImages(Items, Directory);
       end;
       Items.Free();
-      MainForm.Enabled := True;
       BringApplicationToTop();
-      if (CardsCount + SitesCount > 0) then MessageDlg(Format('Saved %d card and %d site images to folder "%s".', [CardsCount, SitesCount, Directory]), mtInformation, [mbOk], 0);
+      if (CardsCount + SitesCount > 0) then begin
+        Beep();
+        MessageDlg(Format('Saved %d card and %d site images to folder "%s".', [CardsCount, SitesCount, Directory]), mtInformation, [mbOk], 0);
+      end;
     end;
   end;
 end;
@@ -3176,6 +3150,7 @@ begin
   Result := 0;
   if (Items.Count > 0) then begin
     PreviousActivePage := PageControl.ActivePage;
+    PageControl.Enabled := False;
     PreviousCurrentCard := CurrentCard;
     PreviousCurrentSite := CurrentSite;
     PreviousFormCaption := MainForm.Caption;
@@ -3227,6 +3202,7 @@ begin
     end;
     MainForm.Caption := PreviousFormCaption;
     PageControl.ActivePage := PreviousActivePage;
+    PageControl.Enabled := True;
   end;
 end;
 
@@ -3249,6 +3225,7 @@ begin
     MainForm.Enabled := MainFormEnabled;
   end;
 end;
+
 
 
 end.
