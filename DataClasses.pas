@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   21.12.2003
- * @modified  08.11.2011
+ * @modified  09.11.2011
  *)
 unit DataClasses;
 
@@ -78,6 +78,7 @@ type
     REQUIRED_FIELDS_EMPTY_MESSAGE: String;
     ContentPicture: TPicture;
     OriginalContentPicture: TPicture; // For undo purposes
+    IsContentPictureChanged: Boolean;
     Thumbnail: TPicture;
     constructor Create();
     destructor Destroy(); override;
@@ -97,6 +98,7 @@ type
     Text: String;
     ContentPicture: TPicture;
     OriginalContentPicture: TPicture; // For undo purposes
+    IsContentPictureChanged: Boolean;
     ShowName: String;
     Comment: String;
     constructor Create();
@@ -130,8 +132,10 @@ type
     ShowName: String; // The name shown in lists etc, incl. owner and count
     Comment: String;
     function GetShowName(): String;
-    // The number of cards in the deck
+    // The number of valid (undeleted) cards in the deck
     function GetCardsCount(): Integer;
+    // The number of valid (undeleted) sites in the deck
+    function GetSitesCount(): Integer;
     // Whether the deck contains this particular site
     function HasSite(Site: TSite): Boolean;
     constructor Create();
@@ -179,6 +183,18 @@ begin
     if (not TDeckCard(Cards.Items[I]).IsDeleted) then
       Inc(Result);
 end;
+
+
+function TDeck.GetSitesCount(): Integer;
+var I: Integer;
+begin
+  Result := 0;
+  for I := 0 to Sites.Count - 1 do
+    if (not TDeckSite(Sites.Items[I]).IsDeleted) then
+      Inc(Result);
+end;
+
+
 
 
 function TDeck.GetShowName(): String;
@@ -234,10 +250,11 @@ end;
 
 constructor TCard.Create();
 begin
-    REQUIRED_FIELDS_EMPTY_MESSAGE := 'Every card must have a title.';
-    ContentPicture := nil;
-    OriginalContentPicture := nil;
-    Thumbnail := nil;
+  REQUIRED_FIELDS_EMPTY_MESSAGE := 'Every card must have a title.';
+  ContentPicture := nil;
+  OriginalContentPicture := nil;
+  IsContentPictureChanged := False;
+  Thumbnail := nil;
 end;
 
 
@@ -273,8 +290,9 @@ end;
 
 constructor TSite.Create();
 begin
-    ContentPicture := nil;
-    OriginalContentPicture := nil;
+  ContentPicture := nil;
+  OriginalContentPicture := nil;
+  IsContentPictureChanged := False;
 end;
 
 

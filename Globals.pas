@@ -3,14 +3,14 @@
  *
  * @author    Erki Suurjaak
  * @created   20.12.2003
- * @modified  08.11.2011
+ * @modified  10.11.2011
  *)
 unit Globals;
 
 interface
 
-uses DataClasses, Imaging, Persistence, classes, SysUtils, Graphics,
-     SyncObjs, Windows, DCL_intf;
+uses SyncObjs, Windows, classes, SysUtils, Graphics, DCL_intf, DataClasses,
+     Imaging, Persistence;
 
 const
   // %s will be replaced by application version.
@@ -74,18 +74,10 @@ const
   CARD_LIST_FILTER_TIMES_ALL = ' ';
 
   // The coordinates of the card image, used for saving it to file
-  CARD_IMAGE_TOP = 65;
-  CARD_IMAGE_LEFT = 23;
-  CARD_IMAGE_WIDTH = 357;
-  CARD_IMAGE_HEIGHT = 497;
   CARD_CONTENT_PICTURE_MAX_WIDTH  = 285;
   CARD_CONTENT_PICTURE_MAX_HEIGHT = 215;
 
   // The coordinates of the site image, used for saving it to file
-  SITE_IMAGE_TOP = 309;
-  SITE_IMAGE_LEFT = 15;
-  SITE_IMAGE_WIDTH = 497;
-  SITE_IMAGE_HEIGHT = 357;
   SITE_CONTENT_PICTURE_MAX_WIDTH  = 395;
   SITE_CONTENT_PICTURE_MAX_HEIGHT = 225;
 
@@ -131,6 +123,11 @@ function SplitTextIntoWords(const S: string): TStringList;
 function FormatByteSize(Size: Integer): String;
 // Returns the application version, e.g. '1.0.1.44'
 function GetApplicationVersion(): String;
+// Returns whether the specified area in the application window is fully visible
+// on screen, or is fully or partially hidden by screen edges or other windows.
+function IsAreaFullyVisible(Area: TRect): Boolean;
+// Brings the application window to top.
+procedure BringApplicationToTop();
 
 
 
@@ -172,12 +169,15 @@ var
   Settings: IStrStrMap;
   Imager: TImaging;
   CardLoadSection: TCriticalSection;
+  CardImageArea: TRect;
+  SiteImageArea: TRect;
+  LastExportDirectory: String = '';
 
 
 
 implementation
 
-uses db, Forms, ShlObj;
+uses Forms;
 
 // Returns the tag number for the specified type, required
 // for automatic interface changes in the card editor
@@ -450,6 +450,70 @@ begin
     end;
   end;
   Result := Format('%d.%d.%d.%d', [V1, V2, V3, V4]);
+end;
+
+
+// Returns whether the specified area in the application window is fully visible
+// on screen, or is fully or partially hidden by screen edges or other windows.
+function IsAreaFullyVisible(Area: TRect): Boolean;
+var
+   CurrentHandle: HWND;
+   AreaRegion, CurrentRegion: HRGN;
+   RegionOverlapType: Integer;
+   ApplicationArea: TRect;
+   CurrentRect: TRect;
+begin
+  Result := False;
+  // Translate area in application window to screen coordinates
+  CurrentRect := Area;
+  GetWindowRect(Application.MainForm.Handle, ApplicationArea);
+  OffsetRect(CurrentRect, ApplicationArea.Left, ApplicationArea.Top);
+
+  // Check if the specified area is within visible screen area
+  if PtInRect(Screen.WorkAreaRect, CurrentRect.TopLeft)
+     and PtInRect(Screen.WorkAreaRect, CurrentRect.BottomRight)
+  then begin
+    AreaRegion := CreateRectRgnIndirect(CurrentRect);
+    CurrentHandle := GetTopWindow(0);
+    RegionOverlapType := NULLREGION;
+
+    // Start from the topmost window and go lower until we reach the application
+    // window, comparing each higher window's area with the specified area.
+    while (CurrentHandle <> 0)
+          and (CurrentHandle <> Application.MainForm.Handle)
+          and (RegionOverlapType = NULLREGION)
+    do begin
+      if IsWindowVisible(CurrentHandle) then begin
+        GetWindowRect(CurrentHandle, CurrentRect);
+        CurrentRegion := CreateRectRgnIndirect(CurrentRect);
+        RegionOverlapType := CombineRgn(CurrentRegion, AreaRegion, CurrentRegion, RGN_AND);
+        DeleteObject(CurrentRegion);
+      end;
+      if (RegionOverlapType = NULLREGION) then begin
+        CurrentHandle := GetNextWindow(CurrentHandle, GW_HWNDNEXT);
+      end;
+    end;
+
+    DeleteObject(AreaRegion);
+    Result := (RegionOverlapType = NULLREGION);
+  end;
+end;
+
+
+// Brings the application window to top.
+procedure BringApplicationToTop();
+var
+  Handle: THandle;
+begin
+  Handle := GetForegroundWindow();
+  if (Application.Handle <> Handle) then begin
+    if (GetWindowLong(Application.Handle, GWL_STYLE) and (WS_MINIMIZE) <> 0)
+      then ShowWindow(Application.Handle, SW_SHOWNOACTIVATE);
+    AttachThreadInput(GetWindowThreadProcessId(Handle, nil), GetCurrentThreadId, True);
+    Application.ProcessMessages; // !!!
+    SetForegroundWindow(Application.Handle);
+    AttachThreadInput(GetWindowThreadProcessId(Handle, nil), GetCurrentThreadId, False);
+  end;
 end;
 
 

@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   02.01.2004
- * @modified  08.11.2011
+ * @modified  09.11.2011
  *)
 unit Imaging;
 
@@ -47,8 +47,6 @@ type
     Cache: IStrMap;
     ResizeIDCounter: Integer;
     ResizeSection: TCriticalSection;
-    // Encodes spaces in the URL
-    function EncodeURLSpaces(URL: string): string;
   public
     constructor Create();
     destructor Destroy(); override;
@@ -73,8 +71,8 @@ type
     // Saves the picture into the specified stream,
     // in the format specified in the filename.
     procedure SavePictureToStream(Bitmap: TBitmap; Stream: TStream; Filename: String);
-    // Captures a rectangle from the current application window.
-    function CaptureRect(Area: TRect): TBitmap;
+    // Captures an area from the current application window.
+    function CaptureArea(Area: TRect): TBitmap;
     // Queues the picture for resizing in a background thread.
     procedure QueueResize(Bitmap: TBitmap; Width, Height: Integer;
                           Item: TDataClass; ResizeType: TResizeType;
@@ -322,7 +320,7 @@ var HTTP: THTTPCli;
 begin
   Stream := TMemoryStream.Create();
   HTTP := THTTPCli.Create(nil);
-  HTTP.URL := EncodeURLSpaces(URL);
+  HTTP.URL := StringReplace(URL, ' ', '%20', [rfReplaceAll]);
   HTTP.NoCache := True;
   HTTP.RcvdStream := Stream;
   try
@@ -362,29 +360,31 @@ end;
 
 
 
-// Encodes spaces in the URL
-function TImaging.EncodeURLSpaces(URL: string): string;
-begin
-  Result := StringReplace(URL, ' ', '%20', [rfReplaceAll]);
-end;
-
-
-// Captures a rectangle from the current application window.
-function TImaging.CaptureRect(Area: TRect): TBitmap;
+// Captures an area from the current application window.
+function TImaging.CaptureArea(Area: TRect): TBitmap;
 var
-  hdcSrc : THandle;
+  CornerColor: TColor;
+  I, X, Y: Integer;
+  FormBitmap: TBitmap;
 begin
-  hdcSrc := GetWindowDC(GetForeGroundWindow);
-  try
-    Result := TBitmap.Create();
-    Result.Width  := Area.Right - Area.Left;
-    Result.Height := Area.Bottom - Area.Top;
-    StretchBlt(Result.Canvas.Handle, 0, 0, Result.Width,
-               Result.Height, hdcSrc, Area.Left, Area.Top,
-               Result.Width, Result.Height, SRCCOPY);
-  finally
-    ReleaseDC(0, hdcSrc);
+  Result := TBitmap.Create();
+  Result.Width  := Area.Right - Area.Left;
+  Result.Height := Area.Bottom - Area.Top;
+  FormBitmap := MainForm.GetFormImage();
+  Result.Canvas.CopyRect(Bounds(0, 0, Result.Width, Result.Height), FormBitmap.Canvas, Area);
+  // Whiten the corner regions, assuming that if the corner pixel is
+  // same colour as form background, this colour is not part of the image.
+  for I := 0 to 3 do begin
+    if (I in [0,2]) then X := 0 else X := Result.Width - 1;
+    if (I in [2,3]) then Y := 0 else Y := Result.Height - 1;
+    CornerColor := Result.Canvas.Pixels[X, Y];
+    if (CornerColor = ColorToRGB(MainForm.Color)) then begin
+      Result.Canvas.Brush.Color := clWhite;
+      Result.Canvas.Brush.Style := bsSolid;
+      Result.Canvas.FloodFill(X, Y, CornerColor, fsSurface);
+    end;
   end;
+  FormBitmap.Free();
 end;
 
 
@@ -437,8 +437,8 @@ end;
 
 // Queues the picture for resizing in a background thread.
 procedure TImaging.QueueResize(Bitmap: TBitmap; Width, Height: Integer;
-                                      Item: TDataClass; ResizeType: TResizeType;
-                                      Callback: TResizeCallback);
+                               Item: TDataClass; ResizeType: TResizeType;
+                               Callback: TResizeCallback);
 begin
   ResizeSection.Enter();
   TResizeThread.Create(ResizeIDCounter, Bitmap, Width, Height, Item, ResizeType, Callback);

@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   21.12.2003
- * @modified  08.11.2011
+ * @modified  09.11.2011
  *)
 unit Persistence;
 
@@ -67,6 +67,8 @@ type
     // Saves the object. If it's a new item, assigns it an ID.
     // If it has subitems, like a TDeck, saves those also.
     procedure Store(Item: TDataClass);
+    // Saves the thumbnail image of the card.
+    procedure StoreCardThumbnail(Card: TCard);
     // Deletes the specified object from the database. Deletes all
     // the db dependencies also
     procedure Delete(Item: TDataClass);
@@ -800,6 +802,22 @@ begin
   end;
 end;
 
+
+// Saves the thumbnail image of the card, if card exists in the database.
+procedure TPersistence.StoreCardThumbnail(Card: TCard);
+var SQL: String;
+    ThumbnailStream: TStringStream;
+begin
+  if (Card.ID <> 0) then begin
+    ThumbnailStream := TStringStream.Create('');
+    if (Card.Thumbnail <> nil) then begin
+      Imager.SavePictureToStream(Card.Thumbnail.Bitmap, ThumbnailStream, '.jpg');
+    end;
+    SQL := 'UPDATE cards SET thumbnail = :thumbnail WHERE id = :id';
+    ExecuteStore(SQL, [@ThumbnailStream, Card.ID]);
+    ThumbnailStream.Free();
+  end;
+end;
 
 
 
