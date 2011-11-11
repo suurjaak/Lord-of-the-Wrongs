@@ -1,3 +1,10 @@
+(**
+ * Lord of the Wrongs card creator application.
+ *
+ * @author    Erki Suurjaak
+ * @created   12.20.2003
+ * @modified  11.11.2011
+ *)
 program lotw;
 
 {$RESOURCE *.RES}                    // Include lotw.res, has icon
