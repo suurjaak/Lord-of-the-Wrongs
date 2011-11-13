@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   21.12.2003
- * @modified  11.11.2011
+ * @modified  12.11.2011
  *)
 unit Persistence;
 
@@ -13,6 +13,37 @@ uses Windows, Dialogs, DataClasses, classes, DISQLite3Api, Graphics,
      DCL_intf;
 
 type
+  // A handy class for loading data from a database query.
+  TRows = class(TObject)
+  private
+    PointerArray: array of array of Pointer;
+    PointerTypes: array of String;
+    // Returns the specified row and column as a boolean.
+    function GetBool(Row, Col: Integer): Boolean;
+    // Returns the specified row and column as an integer.
+    function GetInt(Row, Col: Integer): Integer;
+    // Loads a TPicture streamed from the contents at the specified row and column.
+    // FileExtension specifies the file extension, e.g. '.png' or '.jpg'
+    function GetPic(Row, Col: Integer; FileExtension: String = '.png'): TPicture;
+    // Returns the specified row and column as a string.
+    function GetStr(Row, Col: Integer): String;
+  public
+    Count: Integer;
+    // Creates a matrix with all available rows from the SQLite statement result.
+    constructor Create(Stmt: sqlite3_stmt_ptr; DB: sqlite3_ptr);
+    destructor Destroy(); override;
+    // Returns the specified row and column as a boolean.
+    property Bool[Row, Col: Integer]: Boolean read GetBool;
+    // Returns the specified row and column as an integer.
+    property Int[Row, Col: Integer]: Integer read GetInt;
+    // Loads a TPicture streamed from the contents at the specified row and column.
+    // FileExtension specifies the file extension, e.g. '.png' or '.jpg'
+    property Pic[Row, Col: Integer; FileExtension: String = '.png']: TPicture read GetPic;
+    // Returns the specified row and column as a string.
+    property Str[Row, Col: Integer]: String read GetStr;
+  end;
+
+
   TPersistence = class(TObject)
   private
     DB: sqlite3_ptr;
@@ -21,8 +52,9 @@ type
     // Binds parameters to the specified SQL statement
     procedure BindParameters(Stmt: sqlite3_stmt_ptr; const Parameters: array of const);
     // Executes the SELECT statement in SQL and returns the result
-    function ExecuteSelect(SQL: String): RecordSet; overload;
-    function ExecuteSelect(SQL: String; const Parameters: array of const): RecordSet; overload;
+    function ExecuteSelect(SQL: String): TRows; overload;
+    // Executes the SELECT statement in SQL and returns the result
+    function ExecuteSelect(SQL: String; const Parameters: array of const): TRows; overload;
     // Executes the action statement in SQL and returns the number of affected rows
     function ExecuteAction(SQL: String): Integer; overload;
     function ExecuteAction(SQL: String; const Parameters: array of const): Integer; overload;
@@ -41,6 +73,7 @@ type
     procedure UpdateModification();
   public
     Filename: String;
+    IsNew: Boolean; // Whether it's a newly created database, or existed before
     // Creates a new database connection. If the database does not exist,
     // creates it. If required tables do not exist, creates them, and fills
     // tables (like settings, races, times) with default values.
@@ -56,11 +89,10 @@ type
     // Retrieves all the races in the database
     function RetrieveRaces(): TList;
     // Retrieves all the times in the database
-    function RetrieveTimes(): TStringArray;
+    function RetrieveTimes(): TStringList;
     // Retrieves all the sites in the database
     function RetrieveSites(): TList;
     // Retrieves certain settings from the settings table, in name-value pairs.
-    // Values are TStrings.
     function RetrieveSettings(): IStrStrMap;
     // Retrieves all the card types in the database
     function RetrieveCardTypes(): TList;
@@ -82,6 +114,99 @@ uses
   sysutils, jpeg, pngimage, DIUtils, Globals, HashMap;
 
 
+// Creates a matrix with all available rows from the SQLite statement result.
+constructor TRows.Create(Stmt: sqlite3_stmt_ptr; DB: sqlite3_ptr);
+var
+  I, NumberOfFields: Integer;
+  ColInt: PInteger;
+  ColStr: PString;
+  Stream: TMemoryStream;
+begin
+  Count := 0;
+  SetLength(PointerArray, Count, 0);
+  while (sqlite3_check(sqlite3_step(Stmt), DB) = SQLITE_ROW) do begin
+    NumberOfFields := sqlite3_column_count(Stmt);
+    SetLength(PointerArray, Count + 1, NumberOfFields);
+    if (Length(PointerTypes) = 0) then SetLength(PointerTypes, NumberOfFields);
+    for I := 0 to NumberOfFields - 1 do begin
+      case sqlite3_column_type(Stmt, I) of
+        SQLITE_INTEGER: begin
+          New(ColInt);
+          ColInt^ := sqlite3_column_int(Stmt, I);
+          PointerArray[Count, I] := ColInt;
+          PointerTypes[I] := 'integer';
+        end;
+        SQLITE_BLOB: begin
+          Stream := TMemoryStream.Create();
+          Stream.Write(sqlite3_column_blob(Stmt, I)^, sqlite3_column_bytes(Stmt, I));
+          PointerArray[Count, I] := Stream;
+          PointerTypes[I] := 'object';
+        end;
+        else begin
+          New(ColStr);
+          ColStr^ := sqlite3_column_str(Stmt, I);
+          PointerArray[Count, I] := ColStr;
+          PointerTypes[I] := 'ansistring';
+        end;
+      end;
+    end;
+    Inc(Count);
+  end;
+end;
+
+
+destructor TRows.Destroy();
+var
+  I, J: Integer;
+begin
+  for I := 0 to Length(PointerArray) - 1 do begin
+    for J := 0 to Length(PointerArray[I]) - 1 do begin
+      if (PointerTypes[J] = 'ansistring') then begin
+        // Free string memory by zeroing its length
+        SetLength(PString(PointerArray[I, J])^, 0);
+      end;
+      Dispose(PointerArray[I, J]); // Free pointer or object
+    end;
+  end;
+  SetLength(PointerArray, 0, 0);
+  SetLength(PointerTypes, 0);
+end;
+
+
+// Returns the specified row and column as a boolean.
+function TRows.GetBool(Row, Col: Integer): Boolean;
+begin
+  Result := PInteger(PointerArray[Row, Col])^ = 1;
+end;
+
+
+// Returns the specified row and column as an integer.
+function TRows.GetInt(Row, Col: Integer): Integer;
+begin
+  Result := PInteger(PointerArray[Row, Col])^;
+end;
+
+
+// Loads a TPicture streamed from the contents at the specified row and column.
+// Format specifies the file extension, e.g. '.png' or '.jpg'
+function TRows.GetPic(Row, Col: Integer; FileExtension: String = '.png'): TPicture;
+var
+  Stream: TStream;
+begin
+  Result := nil;
+  Stream := TStream(PointerArray[Row, Col]);
+  if (Stream.Size > 0) then begin
+    Result := Imager.LoadPictureFromStream(Stream, FileExtension);
+  end;
+end;
+
+
+// Returns the specified row and column as a string.
+function TRows.GetStr(Row, Col: Integer): String;
+begin
+  Result := PString(PointerArray[Row, Col])^;
+end;
+
 
 // Creates a new database connection. If the database does not exist,
 // creates it. If required tables do not exist, creates them, and fills
@@ -89,6 +214,7 @@ uses
 constructor TPersistence.Create(Filename: String);
 begin
   try
+    IsNew := not FileExists(Filename) or (GetFileSize(Filename) = 0);
     sqlite3_check(sqlite3_open(PChar(Filename), @DB));
     // Set to vacuum database automatically, keeping its size down
     sqlite3_exec_fast(DB, 'PRAGMA auto_vacuum = 1');
@@ -175,38 +301,29 @@ end;
 
 
 // Executes the SELECT statement in SQL and returns the result
-function TPersistence.ExecuteSelect(SQL: String): RecordSet;
+function TPersistence.ExecuteSelect(SQL: String): TRows;
 begin
   Result := ExecuteSelect(SQL, []);
 end;
 
+
 // Executes the SELECT statement in SQL and returns the result
-function TPersistence.ExecuteSelect(SQL: String; const Parameters: array of const): RecordSet;
+function TPersistence.ExecuteSelect(SQL: String; const Parameters: array of const): TRows;
 var
-  NumberOfFields: Integer;
-  I, J: Integer;
   Stmt: sqlite3_stmt_ptr;
-  Value: AnsiString;
 begin
-  SetLength(Result, 0, 0);
+  Result := nil;
+
   try
     sqlite3_check(sqlite3_prepare_v2(DB, PChar(SQL), -1, @Stmt, nil), DB);
-    I := 0;
     if (Length(Parameters) > 0) then
       BindParameters(Stmt, Parameters);
-    while (sqlite3_check(sqlite3_step(Stmt), DB) = SQLITE_ROW) do
-      begin
-        NumberOfFields := sqlite3_column_count(Stmt);
-        SetLength(Result, I + 1, NumberOfFields);
-        for J := 0 to NumberOfFields - 1 do begin
-          Result[I, J] := sqlite3_column_str(Stmt, J);
-          //Result[I, J] := Value;
-          //SetString(Result[I, J], PChar(sqlite3_column_str(Stmt, J)), Length(Value));
-        end;
-        Inc(I);
-      end;
-  except on E: Exception do
-    ErrorMessage('TPersistence.Retrieve failed with message ''' + E.ClassName + ': ' + E.Message + '''.');
+    Result := TRows.Create(Stmt, DB);
+  except
+    on E: Exception do begin
+      FreeAndNil(Result);
+      ErrorMessage('TPersistence.Retrieve failed with message ''' + E.ClassName + ': ' + E.Message + '''.');
+    end;
   end;
   sqlite3_finalize(Stmt);
 end;
@@ -216,66 +333,50 @@ end;
 // Retrieves all the races in the database
 function TPersistence.RetrieveRaces(): TList;
 var SQL: String;
-    Results: RecordSet;
+    Rows: TRows;
     I: Integer;
     Race: TRace;
     PictureStream: TStringStream;
 begin
-  SQL := 'SELECT id, name, is_good, strength_picture_left, strength_picture_top, ' +
-         'health_picture_left, health_picture_top, character_picture, other_picture, '+
-         'strength_picture, health_picture FROM races';
-  Results := ExecuteSelect(SQL);
+  SQL := 'SELECT id, name, is_good, character_name, strength_picture_left, ' +
+         'strength_picture_top, health_picture_left, health_picture_top, ' +
+         'character_picture, other_picture, strength_picture, health_picture FROM races';
+  Rows := ExecuteSelect(SQL);
   Result := TList.Create();
-  for I := Low(Results) to High(Results) do begin
+  for I := 0 to Rows.Count - 1 do begin
     Race := TRace.Create();
-    Race.ID := StrToInt(Results[I][0]);
-    Race.Name := Results[I][1];
-    Race.IsGood := (Results[I][2] = '1');
-    Race.StrengthPictureLeft := StrToInt(Results[I][3]);
-    Race.StrengthPictureTop := StrToInt(Results[I][4]);
-    Race.HealthPictureLeft := StrToInt(Results[I][5]);
-    Race.HealthPictureTop := StrToInt(Results[I][6]);
-    if (Length(Results[I][7]) > 0) then begin
-      PictureStream := TStringStream.Create(Results[I][7]);
-      Race.CharacterPicture := Imager.LoadPictureFromStream(PictureStream, '.png');
-      PictureStream.Free();
-    end;
-    if (Length(Results[I][8]) > 0) then begin
-      PictureStream := TStringStream.Create(Results[I][8]);
-      Race.OtherPicture := Imager.LoadPictureFromStream(PictureStream, '.png');
-      PictureStream.Free();
-    end;
-    if (Length(Results[I][9]) > 0) then begin
-      PictureStream := TStringStream.Create(Results[I][9]);
-      Race.StrengthPicture := Imager.LoadPictureFromStream(PictureStream, '.png');
-      PictureStream.Free();
-    end;
-    if (Length(Results[I][10]) > 0) then begin
-      PictureStream := TStringStream.Create(Results[I][10]);
-      Race.HealthPicture := Imager.LoadPictureFromStream(PictureStream, '.png');
-      PictureStream.Free();
-    end;
-
+    Race.ID := Rows.Int[I, 0];
+    Race.Name := Rows.Str[I, 1];
+    Race.IsGood := Rows.Bool[I, 2];
+    Race.CharacterName := Rows.Str[I, 3];
+    Race.StrengthPictureLeft := Rows.Int[I, 4];
+    Race.StrengthPictureTop := Rows.Int[I, 5];
+    Race.HealthPictureLeft := Rows.Int[I, 6];
+    Race.HealthPictureTop := Rows.Int[I, 7];
+    Race.CharacterPicture := Rows.Pic[I, 8, '.png'];
+    Race.OtherPicture := Rows.Pic[I, 9, '.png'];
+    Race.StrengthPicture := Rows.Pic[I, 10, '.png'];
+    Race.HealthPicture := Rows.Pic[I, 11, '.png'];
     Result.Add(Race);
   end;
-  SetLength(Results, 0, 0);
+  Rows.Free();
 end;
 
 
 
 // Retrieves all the times in the database
-function TPersistence.RetrieveTimes(): TStringArray;
+function TPersistence.RetrieveTimes(): TStringList;
 var SQL: String;
-    Results: RecordSet;
+    Rows: TRows;
     I: Integer;
 begin
   SQL := 'SELECT time FROM times ORDER BY ordering';
-  Results := ExecuteSelect(SQL);
-  SetLength(Result, Length(Results));
-  for I := Low(Results) to High(Results) do begin
-    Result[I] := Results[I][0];
+  Rows := ExecuteSelect(SQL);
+  Result := TStringList.Create();
+  for I := 0 to Rows.Count - 1 do begin
+    Result.Add(Rows.Str[I, 0]);
   end;
-  SetLength(Results, 0, 0);
+  Rows.Free();
 end;
 
 
@@ -283,45 +384,40 @@ end;
 // Retrieves all the cards in the database
 function TPersistence.RetrieveCards(): TList;
 var SQL: String;
-    Results: RecordSet;
+    Rows: TRows;
     I: Integer;
     Card: TCard;
-    ThumbnailStream: TStringStream;
 begin
   SQL := 'SELECT id, race_id, type_id, time_of_creation, title, subtitle, possession_type, ' +
          'twilight_cost, is_unique, strength, health, time, text, comment, ' +
          'picture_filename, thumbnail, time_of_creation, last_modified, internal_comment FROM cards ' +
          'ORDER BY title, subtitle';
-  Results := ExecuteSelect(SQL);
+  Rows := ExecuteSelect(SQL);
   Result := TList.Create();
-  for I := Low(Results) to High(Results) do begin
+  for I := 0 to Rows.Count - 1 do begin
     Card := TCard.Create();
-    Card.ID := StrToInt(Results[I][0]);
-    Card.Race := GetRaceByID(StrToInt(Results[I][1]));
-    Card.CardType := GetCardTypeByID(StrToInt(Results[I][2]));
-    Card.TimeOfCreation := Results[I][3];
-    Card.Title := Results[I][4];
-    Card.Subtitle := Results[I][5];
-    Card.PossessionType := Results[I][6];
-    Card.TwilightCost := StrToInt(Results[I][7]);
-    Card.IsUnique := (Results[I][8] = '1');
-    Card.Strength := Results[I][9];
-    Card.Health := Results[I][10];
-    Card.Time := Results[I][11];
-    Card.Text := Results[I][12];
-    Card.Comment := Results[I][13];
-    Card.PictureFilename := Results[I][14];
-    if (Length(Results[I][15]) > 0) then begin
-      ThumbnailStream := TStringStream.Create(Results[I][15]);
-      Card.Thumbnail := Imager.LoadPictureFromStream(ThumbnailStream, 'thumb.jpg');
-      ThumbnailStream.Free();
-    end;
-    Card.ExactTimeOfCreation := Results[I][16];
-    Card.TimeOfModification := Results[I][17];
-    Card.InternalComment := Results[I][18];
+    Card.ID := Rows.Int[I, 0];
+    Card.Race := GetRaceByID(Rows.Int[I, 1]);
+    Card.CardType := GetCardTypeByID(Rows.Int[I, 2]);
+    Card.TimeOfCreation := Rows.Str[I, 3];
+    Card.Title := Rows.Str[I, 4];
+    Card.Subtitle := Rows.Str[I, 5];
+    Card.PossessionType := Rows.Str[I, 6];
+    Card.TwilightCost := Rows.Int[I, 7];
+    Card.IsUnique := Rows.Bool[I, 8];
+    Card.Strength := Rows.Str[I, 9];
+    Card.Health := Rows.Str[I, 10];
+    Card.Time := Rows.Str[I, 11];
+    Card.Text := Rows.Str[I, 12];
+    Card.Comment := Rows.Str[I, 13];
+    Card.PictureFilename := Rows.Str[I, 14];
+    Card.Thumbnail := Rows.Pic[I, 15, '.jpg'];
+    Card.ExactTimeOfCreation := Rows.Str[I, 16];;
+    Card.TimeOfModification := Rows.Str[I, 17];;
+    Card.InternalComment := Rows.Str[I, 18];;
     Result.Add(Card);
   end;
-  SetLength(Results, 0, 0);
+  Rows.Free();
 end;
 
 
@@ -329,53 +425,52 @@ end;
 // Retrieves all the sites in the database
 function TPersistence.RetrieveSites(): TList;
 var SQL: String;
-    Results: RecordSet;
+    Rows: TRows;
     I: Integer;
     Site: TSite;
 begin
   SQL := 'SELECT id, time_of_creation, title, picture_filename, time, ' +
          'twilight_cost, direction, text, internal_comment FROM sites ORDER BY title';
-  Results := ExecuteSelect(SQL);
+  Rows := ExecuteSelect(SQL);
   Result := TList.Create();
-  for I := Low(Results) to High(Results) do begin
+  for I := 0 to Rows.Count - 1 do begin
     Site := TSite.Create();
-    Site.ID := StrToInt(Results[I][0]);
-    Site.TimeOfCreation := Results[I][1];
-    Site.Title := Results[I][2];
-    Site.PictureFilename := Results[I][3];
-    Site.Time := Results[I][4];
-    Site.TwilightCost := StrToInt(Results[I][5]);
-    Site.Direction := Results[I][6];
-    Site.Text := Results[I][7];
-    Site.Comment := Results[I][8];
+    Site.ID := Rows.Int[I, 0];
+    Site.TimeOfCreation := Rows.Str[I, 1];
+    Site.Title := Rows.Str[I, 2];
+    Site.PictureFilename := Rows.Str[I, 3];
+    Site.Time := Rows.Str[I, 4];
+    Site.TwilightCost := Rows.Int[I, 5];
+    Site.Direction := Rows.Str[I, 6];
+    Site.Text := Rows.Str[I, 7];
+    Site.Comment := Rows.Str[I, 8];
     Result.Add(Site);
   end;
-  SetLength(Results, 0, 0);
+  Rows.Free();
 end;
 
 
 
 // Retrieves certain settings from the settings table, in name-value pairs.
-// Values are TStrings.
 function TPersistence.RetrieveSettings(): IStrStrMap;
 var SQL: String;
-    Results: RecordSet;
+    Rows: TRows;
     I: Integer;
 begin
   Result := TStrStrHashMap.Create();
   SQL := 'SELECT name, value FROM settings';
-  Results := ExecuteSelect(SQL);
-  for I := Low(Results) to High(Results) do begin
-    Result.PutValue(Results[I][0], Results[I][1]);
+  Rows := ExecuteSelect(SQL);
+  for I := 0 to Rows.Count - 1 do begin
+    Result.PutValue(Rows.Str[I, 0], Rows.Str[I, 1]);
   end;
-  SetLength(Results, 0, 0);
+  Rows.Free();
 end;
 
 
 // Retrieves all the card types in the database
 function TPersistence.RetrieveCardTypes(): TList;
 var SQL: String;
-    Results: RecordSet;
+    Rows: TRows;
     I: Integer;
     CardType: TCardType;
 begin
@@ -383,34 +478,34 @@ begin
          'content_picture_max_width, content_picture_max_height, ' +
          'content_picture_left, content_picture_top, middle_title_left, ' +
          'middle_title_width FROM card_types';
-  Results := ExecuteSelect(SQL);
+  Rows := ExecuteSelect(SQL);
   Result := TList.Create();
-  for I := Low(Results) to High(Results) do begin
+  for I := 0 to Rows.Count - 1 do begin
     CardType := TCardType.Create();
 
-    CardType.ID := StrToInt(Results[I][0]);
-    CardType.Name := Results[I][1];
-    CardType.IsCharacter := (Results[I][2] = '1');
-    CardType.IsPossession := (Results[I][3] = '1');
-    CardType.IsStrength := (Results[I][4] = '1');
-    CardType.IsHealth := (Results[I][5] = '1');
-    CardType.ContentPictureMaxWidth := StrToInt(Results[I][6]);
-    CardType.ContentPictureMaxHeight := StrToInt(Results[I][7]);
-    CardType.ContentPictureLeft := StrToInt(Results[I][8]);
-    CardType.ContentPictureTop := StrToInt(Results[I][9]);
-    CardType.MiddleTitleLeft := StrToInt(Results[I][10]);
-    CardType.MiddleTitleWidth := StrToInt(Results[I][11]);
+    CardType.ID := Rows.Int[I, 0];
+    CardType.Name := Rows.Str[I, 1];
+    CardType.IsCharacter := Rows.Bool[I, 2];
+    CardType.IsPossession := Rows.Bool[I, 3];
+    CardType.IsStrength := Rows.Bool[I, 4];
+    CardType.IsHealth := Rows.Bool[I, 5];
+    CardType.ContentPictureMaxWidth := Rows.Int[I, 6];
+    CardType.ContentPictureMaxHeight := Rows.Int[I, 7];
+    CardType.ContentPictureLeft := Rows.Int[I, 8];
+    CardType.ContentPictureTop := Rows.Int[I, 9];
+    CardType.MiddleTitleLeft := Rows.Int[I, 10];
+    CardType.MiddleTitleWidth := Rows.Int[I, 11];
 
     Result.Add(CardType);
   end;
-  SetLength(Results, 0, 0);
+  Rows.Free();
 end;
 
 
 // Retrieves all the decks in the database
 function TPersistence.RetrieveDecks(): TList;
 var SQL, SubSQL: String;
-    Results, SubResults: RecordSet;
+    Rows, SubRows: TRows;
     I, J: Integer;
     Deck: TDeck;
     DeckCard: TDeckCard;
@@ -418,34 +513,35 @@ var SQL, SubSQL: String;
 begin
   SQL := 'SELECT id, title, time_of_creation, comment FROM decks ' +
          'ORDER BY title';
-  Results := ExecuteSelect(SQL);
+  Rows := ExecuteSelect(SQL);
   Result := TList.Create();
-  for I := Low(Results) to High(Results) do begin
+  for I := 0 to Rows.Count - 1 do begin
     Deck := TDeck.Create();
-    Deck.ID := StrToInt(Results[I][0]);
-    Deck.Title := Results[I][1];
-    Deck.TimeOfCreation := Results[I][2];
-    Deck.Comment := Results[I][3];
+    Deck.ID := Rows.Int[I, 0];
+    Deck.Title := Rows.Str[I, 1];
+    Deck.TimeOfCreation := Rows.Str[I, 2];
+    Deck.Comment := Rows.Str[I, 3];
     SubSQL := 'SELECT id, card_id FROM deck_cards WHERE deck_id = :deck_id';
-    SubResults := ExecuteSelect(SubSQL, [Deck.Id]);
-    for J := Low(SubResults) to High(SubResults) do begin
+    SubRows := ExecuteSelect(SubSQL, [Deck.Id]);
+    for J := 0 to SubRows.Count - 1 do begin
       DeckCard := TDeckCard.Create();
-      DeckCard.ID := StrToInt(SubResults[J][0]);
-      DeckCard.Card := GetCardByID(StrToInt(SubResults[J][1]));
+      DeckCard.ID := SubRows.Int[J, 0];
+      DeckCard.Card := GetCardByID(SubRows.Int[I, 1]);
       Deck.Cards.Add(DeckCard);
     end;
+    SubRows.Free();
     SubSQL := 'SELECT id, site_id FROM deck_sites WHERE deck_id = :deck_id';
-    SubResults := ExecuteSelect(SubSQL, [Deck.Id]);
-    for J := Low(SubResults) to High(SubResults) do begin
+    SubRows := ExecuteSelect(SubSQL, [Deck.Id]);
+    for J := 0 to SubRows.Count - 1 do begin
       DeckSite := TDeckSite.Create();
-      DeckSite.ID := StrToInt(SubResults[J][0]);
-      DeckSite.Site := GetSiteByID(StrToInt(SubResults[J][1]));
+      DeckSite.ID := SubRows.Int[J, 0];
+      DeckSite.Site := GetSiteByID(SubRows.Int[J, 1]);
       Deck.Sites.Add(DeckSite);
     end;
+    SubRows.Free();
     Result.Add(Deck);
   end;
-  SetLength(Results, 0, 0);
-  SetLength(Subresults, 0, 0);
+  Rows.Free();
 end;
 
 
@@ -547,9 +643,8 @@ var SQL: String;
     IsInsert : Boolean;
     DeckCard: TDeckCard;
     DeckSite: TDeckSite;
-    Results: RecordSet;
+    Rows: TRows;
 begin
-  Results := nil;
   IsInsert := (Deck.ID = 0);
   if (IsInsert) then begin
     SQL := 'INSERT INTO decks (title, time_of_creation, comment) VALUES (:title, datetime("now"), :comment)';
@@ -561,8 +656,9 @@ begin
   if (IsInsert) then begin
     Deck.ID := NewID;
     SQL := 'SELECT time_of_creation FROM decks WHERE id = :deck_id';
-    Results := ExecuteSelect(SQL, [Deck.Id]);
-    Deck.TimeOfCreation := Results[0][0];
+    Rows := ExecuteSelect(SQL, [Deck.Id]);
+    Deck.TimeOfCreation := Rows.Str[0, 0];
+    Rows.Free();
   end;
   for I := 0 to Deck.Cards.Count - 1 do begin
     DeckCard := Deck.Cards.Items[I];
@@ -603,7 +699,6 @@ begin
       end;
     end;
   end;
-  SetLength(Results, 0, 0);
 end;
 
 
@@ -701,8 +796,7 @@ end;
 // Retrieves the content picture of the specified object.
 function TPersistence.RetrieveContentPicture(Item: TDataClass): TPicture;
 var
-  Results: RecordSet;
-  StringStream: TStringStream;
+  Rows: TRows;
   SQL: String;
 begin
   Result := nil;
@@ -712,13 +806,11 @@ begin
     SQL := 'SELECT content_picture FROM sites WHERE id = :id';
   end;
   if SQL <> '' then begin
-    Results := ExecuteSelect(SQL, [Item.ID]);
-    if ((Length(Results) > 0) and (Length(Results[0][0]) > 0)) then begin
-      StringStream := TStringStream.Create(Results[0][0]);
-      Result := Imager.LoadPictureFromStream(StringStream, '.png');
-      StringStream.Free();
+    Rows := ExecuteSelect(SQL, [Item.ID]);
+    if (Rows.Count > 0) then begin
+      Result := Rows.Pic[0, 0, '.png'];
     end;
-    SetLength(Results, 0, 0);
+    Rows.Free();
   end else begin
     raise Exception.Create('Fatal Error: trying to get content picture for an object of unknown class ' + Item.ClassName);
   end;
@@ -736,15 +828,15 @@ end;
 // Updates the DatabaseModified setting.
 procedure TPersistence.UpdateModification();
 var
-  Results: RecordSet;
+  Rows: TRows;
 begin
   try
     sqlite3_exec_fast(DB, 'INSERT OR REPLACE INTO settings (name, value) VALUES ("DatabaseModified", datetime("now"))');
-    Results := ExecuteSelect('SELECT value FROM settings WHERE name = "DatabaseModified"');
-    if (Length(Results) > 0) and (Settings <> nil) then begin
-      Settings.PutValue('DatabaseModified', Results[0][0]);
+    Rows := ExecuteSelect('SELECT value FROM settings WHERE name = "DatabaseModified"');
+    if (Rows.Count > 0) and (Settings <> nil) then begin
+      Settings.PutValue('DatabaseModified', Rows.Str[0, 0]);
     end;
-    SetLength(Results, 0, 0);
+    Rows.Free();
   except
   end;
 end;
@@ -754,18 +846,26 @@ end;
 procedure TPersistence.CheckRequiredTables();
 const
   TABLES: array[1..9] of String = (
-    'cards', 'deck_cards', 'deck_sites', 'decks', 'races', 'settings', 'sites', 'times', 'card_types'
+    'settings', 'cards', 'deck_cards', 'deck_sites', 'decks', 'races', 'sites', 'times', 'card_types'
   );
   TABLE_DEFINITIONS: array[1..9] of String = (
+    'CREATE TABLE IF NOT EXISTS settings ( name TEXT PRIMARY KEY NOT NULL DEFAULT "", value TEXT NOT NULL )',
     'CREATE TABLE IF NOT EXISTS cards ( id INTEGER PRIMARY KEY NOT NULL, race_id INTEGER NOT NULL DEFAULT 0, type_id INTEGER NOT NULL, time_of_creation TEXT NOT NULL DEFAULT "", title TEXT NOT NULL, subtitle TEXT, ' + 'possession_type TEXT, twilight_cost INTEGER DEFAULT NULL, is_unique INTEGER DEFAULT 0, strength TEXT, health TEXT, time TEXT, TEXT TEXT, comment TEXT, ' + 'picture_filename TEXT, content_picture BLOB, thumbnail BLOB, last_modified TEXT DEFAULT NULL, internal_comment TEXT)',
     'CREATE TABLE IF NOT EXISTS deck_cards ( id INTEGER PRIMARY KEY NOT NULL, deck_id INTEGER NOT NULL DEFAULT 0, card_id INTEGER NOT NULL DEFAULT 0)',
     'CREATE TABLE IF NOT EXISTS deck_sites ( id INTEGER PRIMARY KEY NOT NULL, deck_id INTEGER NOT NULL DEFAULT 0, site_id INTEGER NOT NULL DEFAULT 0)',
     'CREATE TABLE IF NOT EXISTS decks ( id INTEGER PRIMARY KEY NOT NULL, title TEXT NOT NULL, time_of_creation TEXT NOT NULL DEFAULT "", comment TEXT)',
     'CREATE TABLE IF NOT EXISTS races ( id INTEGER PRIMARY KEY NOT NULL, name TEXT NOT NULL DEFAULT "", is_good INTEGER DEFAULT 0, character_name TEXT NOT NULL, health_picture_left INTEGER NOT NULL DEFAULT 0, health_picture_top INTEGER NOT NULL DEFAULT 0, ' + 'strength_picture_left INTEGER NOT NULL DEFAULT 0, strength_picture_top INTEGER NOT NULL DEFAULT 0, character_picture BLOB, other_picture BLOB, health_picture BLOB, strength_picture BLOB)',
-    'CREATE TABLE IF NOT EXISTS settings ( name TEXT PRIMARY KEY NOT NULL DEFAULT "", value TEXT NOT NULL )',
     'CREATE TABLE IF NOT EXISTS sites ( id INTEGER PRIMARY KEY NOT NULL, time_of_creation TEXT NOT NULL DEFAULT "", title TEXT NOT NULL, picture_filename TEXT, content_picture BLOB, time TEXT NOT NULL, ' + 'twilight_cost INTEGER DEFAULT NULL, direction TEXT NOT NULL, TEXT TEXT, internal_comment TEXT)',
     'CREATE TABLE IF NOT EXISTS times ( time TEXT PRIMARY KEY NOT NULL DEFAULT "", ordering INTEGER DEFAULT NULL)',
     'CREATE TABLE IF NOT EXISTS card_types (id INTEGER PRIMARY KEY NOT NULL, name TEXT NOT NULL, is_character INTEGER NOT NULL, is_possession INTEGER NOT NULL, is_strength INTEGER NOT NULL, is_health INTEGER, ' + 'content_picture_max_width INTEGER, content_picture_max_height INTEGER, content_picture_left INTEGER NOT NULL, content_picture_top INTEGER NOT NULL, middle_title_left INTEGER NOT NULL, middle_title_width INTEGER NOT NULL)'
+  );
+  SETTING_DEFAULTS: array[1..6] of String = (
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("CardThumbnailHeight", "140")',
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("CardThumbnailWidth", "100")',
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("DatabaseCreated", datetime("now"))',
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("DatabaseModified", datetime("now"))',
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteContentPictureMaxHeight", "225")',
+    'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteContentPictureMaxWidth", "395")'
   );
   RACE_DEFAULTS: array[1..4] of String = (
     'INSERT OR IGNORE INTO races (id, name, is_good, character_name, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (1, "Fellowship", 1, "companion", 18, 370, 17, 304, :character_picture, :other_picture, :strength_picture, :health_picture)',
@@ -773,20 +873,11 @@ const
     'INSERT OR IGNORE INTO races (id, name, is_good, character_name, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (6, "Strong Drink", 0, "minion", 20, 371, 20, 304, :character_picture, :other_picture, :strength_picture, :health_picture)',
     'INSERT OR IGNORE INTO races (id, name, is_good, character_name, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (7, "Medium Drink", 0, "minion", 22, 372, 19, 304, :character_picture, :other_picture, :strength_picture, :health_picture)'
   );
-  RACE_NAMES: array[1..8] of String = (
-    'Fellowship', 'French', 'Russian', 'Other', 'Soft Drink', 'Strong Drink', 'Medium Drink', 'Cannabis'
+  RACE_NAMES: array[1..4] of String = (
+    'Fellowship', 'Soft Drink', 'Strong Drink', 'Medium Drink'
   );
   RACE_PICTURES: array[1..4] of String = (
     'Character', 'Other', 'Strength', 'Health'
-  );
-  SETTING_DEFAULTS: array[1..7] of String = (
-    'INSERT OR IGNORE INTO settings (name, value) VALUES ("CardThumbnailHeight", "140")',
-    'INSERT OR IGNORE INTO settings (name, value) VALUES ("CardThumbnailWidth", "100")',
-    'INSERT OR IGNORE INTO settings (name, value) VALUES ("DatabaseCreated", datetime("now"))',
-    'INSERT OR IGNORE INTO settings (name, value) VALUES ("DatabaseModified", datetime("now"))',
-    'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteContentPictureMaxHeight", "225")',
-    'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteContentPictureMaxWidth", "395")',
-    'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteFirstTime", "14")'
   );
   TIME_DEFAULTS: array[1..9] of String = (
     'INSERT OR IGNORE INTO times (time, ordering) VALUES ("14", 1)',
@@ -809,7 +900,7 @@ var
   I, J, K: Integer;
   TableDefaultsMap: IStrMap;
   Defaults: TStringList;
-  DBResults: RecordSet;
+  Rows: TRows;
   Streams: array of TResourceStream;
 begin
   TableDefaultsMap := TStrHashMap.Create();
@@ -824,9 +915,9 @@ begin
   TableDefaultsMap.PutValue('card_types',    Defaults);
 
   for I := Low(TABLES) to High(TABLES) do begin
-    DBResults := ExecuteSelect('SELECT name FROM sqlite_master WHERE name = :name', [TABLES[I]]);
+    Rows := ExecuteSelect('SELECT name FROM sqlite_master WHERE name = :name', [TABLES[I]]);
     Defaults := TableDefaultsMap.GetValue(Tables[I]) as TStringList;
-    if Length(DBResults) = 0 then begin
+    if Rows.Count = 0 then begin
       ExecuteAction(TABLE_DEFINITIONS[I]);
       if Defaults <> nil then begin
         for J := 0 to Defaults.Count - 1 do begin
@@ -843,8 +934,9 @@ begin
         end;
       end;
     end;
-    SetLength(DBResults, 0, 0);
+    Rows.Free();
   end;
+  // Setting defaults insert always
   for I := Low(SETTING_DEFAULTS) to High(SETTING_DEFAULTS) do begin
     sqlite3_exec_fast(DB, SETTING_DEFAULTS[I]);
   end;

@@ -11,8 +11,8 @@ program lotw;
 {$RESOURCE 'images.res' 'images.rc'} // Include other image resources
 
 uses
+  FastMM4 in 'FastMM4.pas',
   Forms,
-  HashMap in 'HashMap.pas',
   Main in 'Main.pas' {MainForm},
   Globals in 'Globals.pas',
   DataClasses in 'DataClasses.pas',

@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   21.12.2003
- * @modified  11.11.2011
+ * @modified  12.11.2011
  *)
 unit DataClasses;
 
@@ -12,25 +12,33 @@ interface
 uses Graphics, classes;
 
 type
-  TStringArray = array of String;
-  RecordSet = array of TStringArray;
 
-  // Basically, just a container for a string.
-  TString = class
-    Value: String;
-  end;
-
-  TSortInfo = class
+  TSortInfo = class(TObject)
     SortColumn: String;
     IsSortReversed: Boolean;
     constructor Create();
   end;
 
 
-  TDataClass = class
+  TDataClass = class(TObject)
   public
     ID: Integer;
   end;
+
+  // Ancestor for cards and sites
+  TPlayable = class(TDataClass)
+  public
+    TimeOfCreation: String;
+    Title: String;
+    Text: String;
+    PictureFilename: String;
+    PictureFileWidth: Integer;  // Original width of the recently loaded picture
+    PictureFileHeight: Integer; // Original height of the recently loaded picture
+    ContentPicture: TPicture;
+    OriginalContentPicture: TPicture; // For undo purposes
+    IsContentPictureChanged: Boolean;
+  end;
+
 
   TCardType = class(TDataClass)
   public
@@ -69,14 +77,12 @@ type
 
 
 
-  TCard = class(TDataClass)
+  TCard = class(TPlayable)
   public
     CardType: TCardType;
     OriginalCardType: TCardType; // For undo purposes
-    TimeOfCreation: String;
     ExactTimeOfCreation: String;
     TimeOfModification: String;
-    Title: String;
     Subtitle: String;
     PossessionType: String;        // as in LOTR is hand weapon, helm etc
     TwilightCost: Integer;
@@ -84,17 +90,12 @@ type
     Strength: String;
     Health: String;
     Time: String;
-    Text: String;
     Comment: String;
-    PictureFilename: String;
     Race: TRace;
     OriginalRace: TRace;     // For undo purposes
     ShowName: String; // The name shown in lists etc, incl. race and type
     InternalComment: String;
     REQUIRED_FIELDS_EMPTY_MESSAGE: String;
-    ContentPicture: TPicture;
-    OriginalContentPicture: TPicture; // For undo purposes
-    IsContentPictureChanged: Boolean;
     Thumbnail: TPicture;
     constructor Create();
     destructor Destroy(); override;
@@ -103,18 +104,11 @@ type
   end;
 
 
-  TSite = class(TDataClass)
+  TSite = class(TPlayable)
   public
-    TimeOfCreation: String;
-    Title: String;
-    PictureFilename: String;
     Time: String;
     TwilightCost: Integer;
     Direction: String;
-    Text: String;
-    ContentPicture: TPicture;
-    OriginalContentPicture: TPicture; // For undo purposes
-    IsContentPictureChanged: Boolean;
     ShowName: String;
     Comment: String;
     constructor Create();
@@ -163,6 +157,7 @@ type
 implementation
 
 uses SysUtils, Globals;
+
 
 constructor TSortInfo.Create();
 begin

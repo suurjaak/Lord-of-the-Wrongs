@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   20.12.2003
- * @modified  11.11.2011
+ * @modified  12.11.2011
  *)
 unit Globals;
 
@@ -97,7 +97,9 @@ function GetApplicationVersion(): String;
 // on screen, or is fully or partially hidden by screen edges or other windows.
 function IsAreaFullyVisible(Area: TRect): Boolean;
 // Brings the application window to top.
-procedure BringApplicationToTop();
+procedure BringApplicationToTop(DoBeep: Boolean);
+// Returns 's' if count is not 1, '' otherwise.
+function Plural(Count: Integer): String;
 
 
 
@@ -131,7 +133,7 @@ var
   CurrentDeck: TDeck;
   CurrentRace: TRace;
   CurrentSite: TSite;
-  Times: TStringArray;
+  Times: TStringList;
   Decks: TList;
   Cards: TList;
   Races: TList;
@@ -143,6 +145,7 @@ var
   CardImageArea: TRect;
   SiteImageArea: TRect;
   LastExportDirectory: String = '';
+  IsMainFormActivated: Boolean = False;
 
 
 implementation
@@ -330,7 +333,8 @@ end;
 // Returns a system setting, from the Settings map
 function GetSetting(Name: String): String;
 begin
-  Result := Settings.GetValue(Name);
+  Result := '';
+  if Settings <> nil then Result := Settings.GetValue(Name);
 end;
 
 
@@ -339,7 +343,7 @@ function GetSettingInt(Name: String): Integer;
 var Temp: String;
 begin
   Result := 0;
-  Temp := Settings.GetValue(Name);
+  Temp := GetSetting(Name);
   if (Temp <> '') then
     Result := StrToInt(Temp);
 end;
@@ -488,7 +492,7 @@ end;
 
 
 // Brings the application window to top.
-procedure BringApplicationToTop();
+procedure BringApplicationToTop(DoBeep: Boolean);
 var
   Handle: THandle;
 begin
@@ -501,8 +505,15 @@ begin
     SetForegroundWindow(Application.Handle);
     AttachThreadInput(GetWindowThreadProcessId(Handle, nil), GetCurrentThreadId, False);
   end;
+  if (DoBeep) then Beep();
 end;
 
+
+// Returns 's' if count is not 1, '' otherwise.
+function Plural(Count: Integer): String;
+begin
+  if (Count <> 1) then Result :=  's' else Result := '';
+end;
 
 
 end.

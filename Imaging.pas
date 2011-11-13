@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   02.01.2004
- * @modified  09.11.2011
+ * @modified  12.11.2011
  *)
 unit Imaging;
 
@@ -15,7 +15,7 @@ uses Windows, graphics, dialogs, SysUtils, classes, SyncObjs, GR32, DCL_intf,
 type
   TResizeType = (rsThumbnail, rsContent);
 
-  TResizeCallback = procedure(Resized: TBitmap; ResizeType: TResizeType; Item: TDataClass) of object;
+  TResizeCallback = procedure(Resized: TBitmap; ResizeType: TResizeType; Item: TPlayable) of object;
 
   // Thread object that resizes a picture in the background, leaving GUI
   // responsive. Executes immediately on creation, callback is called with
@@ -27,7 +27,7 @@ type
     Resized: TBitmap;
     Width: Integer;
     Height: Integer;
-    Item: TDataClass;
+    Item: TPlayable;
     ResizeType: TResizeType;
     Callback: TResizeCallback;
     // Sets the finished resized picture into the data object.
@@ -36,7 +36,7 @@ type
     procedure Execute(); override;
   public
     constructor Create(ID: Integer; Original: TBitmap; Width, Height: Integer;
-                       Item: TDataClass; ResizeType: TResizeType;
+                       Item: TPlayable; ResizeType: TResizeType;
                        Callback: TResizeCallback);
     destructor Destroy(); override;
   end;
@@ -75,7 +75,7 @@ type
     function CaptureArea(Area: TRect): TBitmap;
     // Queues the picture for resizing in a background thread.
     procedure QueueResize(Bitmap: TBitmap; Width, Height: Integer;
-                          Item: TDataClass; ResizeType: TResizeType;
+                          Item: TPlayable; ResizeType: TResizeType;
                           Callback: TResizeCallback);
   end;
 
@@ -89,7 +89,7 @@ uses jpeg, Globals, HttpProt, pngimage, GR32_Resamplers, axctrls, main, ExtCtrls
 
 
 constructor TResizeThread.Create(ID: Integer; Original: TBitmap; Width, Height: Integer;
-                                 Item: TDataClass; ResizeType: TResizeType;
+                                 Item: TPlayable; ResizeType: TResizeType;
                                  Callback: TResizeCallback);
 begin
   inherited Create(False);
@@ -437,7 +437,7 @@ end;
 
 // Queues the picture for resizing in a background thread.
 procedure TImaging.QueueResize(Bitmap: TBitmap; Width, Height: Integer;
-                               Item: TDataClass; ResizeType: TResizeType;
+                               Item: TPlayable; ResizeType: TResizeType;
                                Callback: TResizeCallback);
 begin
   ResizeSection.Enter();
