@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   21.12.2003
- * @modified  12.11.2011
+ * @modified  14.11.2011
  *)
 unit DataClasses;
 
@@ -37,6 +37,7 @@ type
     ContentPicture: TPicture;
     OriginalContentPicture: TPicture; // For undo purposes
     IsContentPictureChanged: Boolean;
+    function GetShowName(): String; virtual; abstract;
   end;
 
 
@@ -99,8 +100,8 @@ type
     Thumbnail: TPicture;
     constructor Create();
     destructor Destroy(); override;
-    function GetShowName(): String;
     function AreRequiredFieldsEmpty(): Boolean;
+    function GetShowName(): String; override;
   end;
 
 
@@ -113,7 +114,7 @@ type
     Comment: String;
     constructor Create();
     destructor Destroy(); override;
-    function GetShowName(): String;
+    function GetShowName(): String; override;
   end;
 
 

@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   12.20.2003
- * @modified  12.11.2011
+ * @modified  14.11.2011
  *)
 unit Main;
 
@@ -57,7 +57,7 @@ type
     LabelListDeckAllCards: TLabel;
     LabelListDeckCards: TLabel;
     PopupDeckCardsListMenu: TPopupMenu;
-    Viewcard1: TMenuItem;
+    CardListMenu: TMenuItem;
     Removecardfromdeck1: TMenuItem;
     ButtonRemoveCardFromDeck: TButton;
     ButtonAddCardToDeck: TButton;
@@ -242,7 +242,7 @@ type
       State: TDragState; var Accept: Boolean);
     procedure ListDeckCardsDragDrop(Sender, Source: TObject; X,
       Y: Integer);
-    procedure Viewcard1Click(Sender: TObject);
+    procedure CardListMenuClick(Sender: TObject);
     procedure ComboSiteListChange(Sender: TObject);
     procedure ButtonNewSiteClick(Sender: TObject);
     procedure ButtonSaveSiteClick(Sender: TObject);
@@ -393,7 +393,7 @@ type
     // Sets a text to the specified status panel and schedules it for clearing
     // after timeout (0 - no clearing).
     procedure SetStatusText(Status: String; StatusPanel: Integer = 0; Timeout: Integer = 1500);
-    // Saves all global cards, all global sites, or all deck cards and sites,
+    // Saves all global cards, all global sites, or all current deck cards and sites,
     // depending on Target ('cards'/'sites'/'deck').
     procedure SaveSitesAndCards(Target: String);
 
@@ -1061,23 +1061,6 @@ begin
   LabelEditSubtitle.FocusControl.Visible := LabelEditSubtitle.Visible;
   LabelEditPossessionType.Visible := Card.CardType.IsPossession;
   LabelEditPossessionType.FocusControl.Visible := LabelEditPossessionType.Visible;
-
-{
-  for I := 0 to Control.ControlCount - 1 do begin
-    CurrentControl := (Control.Controls[I] as TControl);
-    // If the control is a TPanel, recurse into its controls
-    if (CurrentControl is TPanel) then begin
-      if (CurrentControl.Tag <> 0) then
-        CurrentControl.Visible := MatchesTag(CurrentControl, GetCardTypeTag(Card.CardType));
-      ChangeCardEditorVisibility(CurrentControl as TPanel, Card);
-    end else if (CurrentControl.Tag <> 0) then begin
-      CurrentControl.Visible := MatchesTag(CurrentControl, GetCardTypeTag(Card.CardType));
-      if (MatchesTag(CurrentControl, TAG_SHADOW_CONTROL)) then
-       if (MatchesTag(CurrentControl, GetCardTypeTag(Card.CardType))) then
-         CurrentControl.Visible := not Card.Race.IsGood;
-    end
-  end;
-}
 end;
 
 
@@ -2386,7 +2369,7 @@ begin
 end;
 
 
-procedure TMainForm.Viewcard1Click(Sender: TObject);
+procedure TMainForm.CardListMenuClick(Sender: TObject);
 begin
   AnyCardListDblClick(ListDeckCards);
 end;
@@ -3082,9 +3065,14 @@ begin
 end;
 
 
-// Saves all global cards, all global sites, or all deck cards and sites,
+// Saves all global cards, all global sites, or all current deck cards and sites,
 // depending on Target ('cards'/'sites'/'deck').
 procedure TMainForm.SaveSitesAndCards(Target: String);
+const
+  BASE_MESSAGE =
+    NEW_LINE + NEW_LINE +
+    'The program will be unresponsive for a few seconds. ' +
+    'Existing files will be overwritten. Proceed?';
 var
   I, CardsCount, SitesCount: Integer;
   Directory: String;
@@ -3094,7 +3082,9 @@ var
   Items: TList;
   DeckSite: TDeckSite;
   DeckCard: TDeckCard;
+  ActiveControl: TWinControl;
 begin
+    ActiveControl := MainForm.ActiveControl;
     if (GetCheckSavingResult(Pos('cards', Target) > 0, Pos('sites', Target) > 0, False) <> mrCancel) then begin
     if (LastExportDirectory = '') then LastExportDirectory := GetCurrentDir();
     if (Target = 'cards') then
@@ -3108,12 +3098,12 @@ begin
       DirectoryLink := Format('<a href="file://%s">%s</a>', [StringReplace(Directory, '"', '%22', [rfReplaceAll]), ExtractFileName(Directory)]);
       if (Target = 'cards') then begin
         Items := Cards;
-        Message1 := Format('Saving %d %s to folder "%s".%s%sThe program will be unresponsive for a few seconds.', [Items.Count, Target, Directory, NEW_LINE, NEW_LINE]);
+        Message1 := Format('Saving %d %s to folder "%s".%s', [Items.Count, Target, Directory, BASE_MESSAGE]);
         Message2 := Format('Saved %d %s to folder %s.', [Items.Count, Target, Directory]);
         StatusMessage := Format('Saved %d %s to folder %s.', [Items.Count, Target, DirectoryLink]);
       end else if (Target = 'sites') then begin
         Items := Sites;
-        Message1 := Format('Saving %d %s to folder "%s".%s%sThe program will be unresponsive for a few seconds.', [Items.Count, Target, Directory, NEW_LINE, NEW_LINE]);
+        Message1 := Format('Saving %d %s to folder "%s".%s', [Items.Count, Target, Directory, BASE_MESSAGE]);
         Message2 := Format('Saved %d %s to folder "%s".', [Items.Count, Target, Directory]);
         StatusMessage := Format('Saved %d %s to folder %s.', [Items.Count, Target, DirectoryLink]);
       end else begin
@@ -3134,25 +3124,27 @@ begin
             Inc(SitesCount);
           end;
         end;
-        Message1 := Format('Saving deck "%s" to folder "%s" (%d cards and %d sites).%s%sThe program will be unresponsive for a few seconds.', [CurrentDeck.Title, Directory, CardsCount, SitesCount, NEW_LINE, NEW_LINE]);
+        Message1 := Format('Saving deck "%s" to folder "%s" (%d cards and %d sites).%s', [CurrentDeck.Title, Directory, CardsCount, SitesCount, BASE_MESSAGE]);
         Message2 := Format('Saved deck "%s" to folder "%s" (%d cards and %d sites).', [CurrentDeck.Title, Directory, CardsCount, SitesCount]);
         StatusMessage := Format('Saved deck "%s" to folder %s (%d cards and %d sites).', [CurrentDeck.Title, DirectoryLink, CardsCount, SitesCount]);
       end;
       LastExportDirectory := Directory;
-      MessageDlg(Message1, mtInformation, [mbOk], 0);
-      ProgressBar.Visible := True;
-      BatchSaveImages(Sites, Directory);
-      if (Items.Count > 0) then begin
-        BringApplicationToTop(True);
-        SetStatusText(StatusMessage, 0, 0);
-        MessageDlg(Message2, mtInformation, [mbOk], 0);
+      if (mrCancel <> MessageDlg(Message1, mtInformation, [mbOk, mbCancel], 0)) then begin
+        ProgressBar.Visible := True;
+        BatchSaveImages(Items, Directory);
+        if (Items.Count > 0) then begin
+          BringApplicationToTop(True);
+          SetStatusText(StatusMessage, 0, 0);
+          MessageDlg(Message2, mtInformation, [mbOk], 0);
+        end;
+        // Disable drawing progress bar
+        ProgressBar.Visible := False;
+        StatusBar.Panels[1].Style := psText;
       end;
-      // Disable drawing progress bar
-      ProgressBar.Visible := False;
-      StatusBar.Panels[1].Style := psText;
       if (TargetType = 'deck') then Items.Free();
     end;
   end;
+  MainForm.ActiveControl := ActiveControl;
 end;
 
 
@@ -3170,17 +3162,18 @@ begin
   SaveSitesAndCards('deck');
 end;
 
-// Batch saves the images of all specified cards or items
+// Batch saves the images of all specified cards or items. Duplicate filenames
+// get numbered, e.g. "card Na zdorovje! (Fellowship event) (1).png"
 function TMainForm.BatchSaveImages(Items: TList; Directory: String): Integer;
 var
   I: Integer;
   PreviousCurrentCard: TCard;
   PreviousCurrentSite: TSite;
-  Item: TDataClass;
+  Item: TPlayable;
   ActivePage, PreviousActivePage: TTabSheet;
-  Filename, ShowName: String;
+  Filename: String;
   Bitmap: TBitmap;
-  Filenames: IStrStrMap;
+  DuplicateFilenames: IStrStrMap;
   UniqueCounter: Integer;
   PreviewArea: TRect;
 begin
@@ -3190,33 +3183,41 @@ begin
     PageControl.Enabled := False;
     PreviousCurrentCard := CurrentCard;
     PreviousCurrentSite := CurrentSite;
-    Filenames := TStrStrHashMap.Create();
+    DuplicateFilenames := TStrStrHashMap.Create();
+    // Mark duplicate filenames
+    for I := 0 to Items.Count - 1 do begin
+      Item := Items.Items[I];
+      Filename := Format('%s\%s %s.png', [Directory, IfThen(Item is TCard, 'card', 'site'), Item.GetShowName()]);
+      if (DuplicateFileNames.ContainsKey(Filename)) then
+      DuplicateFilenames.PutValue(Filename,
+        IfThen(DuplicateFileNames.ContainsKey(Filename), 'duplicate', 'single'));
+    end;
     for I := 0 to Items.Count - 1 do begin
       Item := Items.Items[I];
       if (Item is TCard) then begin
         CurrentCard := Item as TCard;
         PreviewArea := CardImageArea;
         ActivePage := PageCardEditor;
-        ShowName := CurrentCard.GetShowName();
       end else begin
         CurrentSite := Item as TSite;
         PreviewArea := SiteImageArea;
         ActivePage := PageSiteEditor;
-        ShowName := CurrentSite.GetShowName();
       end;
       SetStatusText(Format('Saving image %d of %d.', [Result + 1, Items.Count]));
       ProgressBar.Position := Floor((Result + 1) / Items.Count * ProgressBar.Max);
 
       PageControl.ActivePage := ActivePage;
       if (Item is TCard) then LoadCard(CurrentCard) else LoadSite(CurrentSite);
-      Filename := Format('%s\%s %s.png', [Directory, IfThen(Item is TCard, 'card', 'site'), ShowName]);
-      UniqueCounter := 0;
-      while Filenames.ContainsKey(Filename) do begin
-        // There can be duplicates which should be saved under different names
-        Inc(UniqueCounter);
-        Filename := Format('%s\%s %s (%d).png', [Directory, IfThen(Item is TCard, 'card', 'site'), ShowName, UniqueCounter]);
+      Filename := Format('%s\%s %s.png', [Directory, IfThen(Item is TCard, 'card', 'site'), Item.GetShowName()]);
+      if (DuplicateFilenames.GetValue(Filename) = 'duplicate') then begin
+        UniqueCounter := 0;
+        while (DuplicateFilenames.ContainsKey(Filename)) do begin
+          // There can be duplicates which should be saved under different names
+          Inc(UniqueCounter);
+          Filename := Format('%s\%s %s (%d).png', [Directory, IfThen(Item is TCard, 'card', 'site'), Item.GetShowName(), UniqueCounter]);
+        end;
+        DuplicateFilenames.PutValue(Filename, ' ');
       end;
-      Filenames.PutValue(Filename, ' ');
       Bitmap := Imager.CaptureArea(PreviewArea);
       Imager.SavePictureToDisk(Bitmap, Filename);
       Bitmap.Free();

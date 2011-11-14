@@ -1,6 +1,9 @@
 CHANGELOG
 ---------
 
+2011-11-14  v1.0.6, build 49.
+- Fixed some bugs with batch exports.
+
 2011-11-12  v1.0.5, build 48.
 - Added a progress bar for batch exports.
 - Added a status bar with refreshing information.
