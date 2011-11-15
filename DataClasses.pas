@@ -37,7 +37,7 @@ type
     ContentPicture: TPicture;
     OriginalContentPicture: TPicture; // For undo purposes
     IsContentPictureChanged: Boolean;
-    function GetShowName(): String; virtual; abstract;
+    function GetDisplayName(): String; virtual; abstract;
   end;
 
 
@@ -101,7 +101,7 @@ type
     constructor Create();
     destructor Destroy(); override;
     function AreRequiredFieldsEmpty(): Boolean;
-    function GetShowName(): String; override;
+    function GetDisplayName(): String; override;
   end;
 
 
@@ -114,7 +114,7 @@ type
     Comment: String;
     constructor Create();
     destructor Destroy(); override;
-    function GetShowName(): String; override;
+    function GetDisplayName(): String; override;
   end;
 
 
@@ -142,7 +142,7 @@ type
     Sites: TList;
     ShowName: String; // The name shown in lists etc, incl. owner and count
     Comment: String;
-    function GetShowName(): String;
+    function GetDisplayName(): String;
     // The number of valid (undeleted) cards in the deck
     function GetCardsCount(): Integer;
     // The number of valid (undeleted) sites in the deck
@@ -209,7 +209,7 @@ end;
 
 
 
-function TDeck.GetShowName(): String;
+function TDeck.GetDisplayName(): String;
 var I, Count: integer;
 begin
   if not (Length(ShowName) > 0) then begin
@@ -280,7 +280,7 @@ end;
 
 
 
-function TCard.GetShowName(): String;
+function TCard.GetDisplayName(): String;
 begin
   if not (Length(ShowName) > 0) then begin
     ShowName := Title;
@@ -316,7 +316,7 @@ begin
 end;
 
 
-function TSite.GetShowName(): String;
+function TSite.GetDisplayName(): String;
 begin
   if not (Length(ShowName) > 0) then begin
     ShowName := Format('%s (time %s)', [Title, Time]);

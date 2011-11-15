@@ -421,7 +421,7 @@ procedure TMainForm.ButtonSavePictureClick(Sender: TObject);
 var Filename: String;
     Bitmap: TBitmap;
 begin
-   SaveImageDialog.Filename := 'card ' + CurrentCard.GetShowName();
+   SaveImageDialog.Filename := 'card ' + CurrentCard.GetDisplayName();
    if (SaveImageDialog.Execute()) then begin
      Application.ProcessMessages(); // Let dialog disappear
      Filename := SaveImageDialog.Filename;
@@ -479,7 +479,6 @@ begin
   ProgressBar.Parent := StatusBar;
   LabelStatus.Parent := StatusBar;
   StatusBar.Panels[0].Style := psOwnerDraw;
-  StatusBar.Panels[1].Style := psOwnerDraw;
 end;
 
 
@@ -944,7 +943,7 @@ begin
   ComboCardListMap.Clear();
   for I := 0 to Cards.Count - 1 do begin
     Card := Cards.Items[I];
-    ComboCardList.Items.Add(Card.GetShowName());
+    ComboCardList.Items.Add(Card.GetDisplayName());
     ComboCardListMap.PutValue(IntToStr(I), Card);
   end;
   PopulateListCards();
@@ -966,8 +965,8 @@ begin
   ComboListDecks.Items.Add(' ');
   for I := 0 to Decks.Count - 1 do begin
     Deck := Decks.Items[I];
-    ComboListDecks.Items.Add(Deck.GetShowName());
-    ComboDeckList.Items.Add(Deck.GetShowName());
+    ComboListDecks.Items.Add(Deck.GetDisplayName());
+    ComboDeckList.Items.Add(Deck.GetDisplayName());
     ComboListDecksMap.PutValue(IntToStr(I), Deck);
     if (Deck = CurrentDeck) then
       Index := I;
@@ -994,7 +993,7 @@ begin
   ComboSiteListMap.Clear();
   for I := 0 to Sites.Count - 1 do begin
     Site := Sites.Items[I];
-    ComboSiteList.Items.Add(Site.GetShowName());
+    ComboSiteList.Items.Add(Site.GetDisplayName());
     ComboSiteListMap.PutValue(IntToStr(I), Site);
   end;
   PopulateListDeckAllSites();
@@ -1204,6 +1203,7 @@ begin
       end;
     end;
   finally
+    PanelCardPicture.Visible := True;
     Application.ProcessMessages(); // Allow UI to repaint
   end;
   if (UpdatePicture and (IsCardChanged or (Card.Thumbnail = nil))) then begin
@@ -1826,7 +1826,7 @@ begin
   SetCardDataToInterface(CurrentCard);
   PreviewCard(CurrentCard);
   CurrentCard.IsContentPictureChanged := False;
-  SetStatusText(Format('Cleared unsaved changes to card "%s"', [CurrentCard.GetShowName()]), 0, 0);
+  SetStatusText(Format('Cleared unsaved changes to card "%s"', [CurrentCard.GetDisplayName()]), 0, 0);
   SetCardChanged(False);
 end;
 
@@ -2681,7 +2681,7 @@ var
   Filename: String;
   Bitmap: TBitmap;
 begin
-   SaveImageDialog.Filename := 'site ' + CurrentSite.GetShowName();
+   SaveImageDialog.Filename := 'site ' + CurrentSite.GetDisplayName();
    if (SaveImageDialog.Execute()) then begin
      Application.ProcessMessages();
      Filename := SaveImageDialog.Filename;
@@ -3130,16 +3130,12 @@ begin
       end;
       LastExportDirectory := Directory;
       if (mrCancel <> MessageDlg(Message1, mtInformation, [mbOk, mbCancel], 0)) then begin
-        ProgressBar.Visible := True;
         BatchSaveImages(Items, Directory);
         if (Items.Count > 0) then begin
           BringApplicationToTop(True);
           SetStatusText(StatusMessage, 0, 0);
           MessageDlg(Message2, mtInformation, [mbOk], 0);
         end;
-        // Disable drawing progress bar
-        ProgressBar.Visible := False;
-        StatusBar.Panels[1].Style := psText;
       end;
       if (TargetType = 'deck') then Items.Free();
     end;
@@ -3179,6 +3175,8 @@ var
 begin
   Result := 0;
   if (Items.Count > 0) then begin
+    ProgressBar.Visible := True;
+    StatusBar.Panels[1].Style := psOwnerDraw;
     PreviousActivePage := PageControl.ActivePage;
     PageControl.Enabled := False;
     PreviousCurrentCard := CurrentCard;
@@ -3187,8 +3185,7 @@ begin
     // Mark duplicate filenames
     for I := 0 to Items.Count - 1 do begin
       Item := Items.Items[I];
-      Filename := Format('%s\%s %s.png', [Directory, IfThen(Item is TCard, 'card', 'site'), Item.GetShowName()]);
-      if (DuplicateFileNames.ContainsKey(Filename)) then
+      Filename := Format('%s\%s %s.png', [Directory, IfThen(Item is TCard, 'card', 'site'), Item.GetDisplayName()]);
       DuplicateFilenames.PutValue(Filename,
         IfThen(DuplicateFileNames.ContainsKey(Filename), 'duplicate', 'single'));
     end;
@@ -3208,13 +3205,13 @@ begin
 
       PageControl.ActivePage := ActivePage;
       if (Item is TCard) then LoadCard(CurrentCard) else LoadSite(CurrentSite);
-      Filename := Format('%s\%s %s.png', [Directory, IfThen(Item is TCard, 'card', 'site'), Item.GetShowName()]);
+      Filename := Format('%s\%s %s.png', [Directory, IfThen(Item is TCard, 'card', 'site'), Item.GetDisplayName()]);
       if (DuplicateFilenames.GetValue(Filename) = 'duplicate') then begin
         UniqueCounter := 0;
         while (DuplicateFilenames.ContainsKey(Filename)) do begin
           // There can be duplicates which should be saved under different names
           Inc(UniqueCounter);
-          Filename := Format('%s\%s %s (%d).png', [Directory, IfThen(Item is TCard, 'card', 'site'), Item.GetShowName(), UniqueCounter]);
+          Filename := Format('%s\%s %s (%d).png', [Directory, IfThen(Item is TCard, 'card', 'site'), Item.GetDisplayName(), UniqueCounter]);
         end;
         DuplicateFilenames.PutValue(Filename, ' ');
       end;
@@ -3239,6 +3236,8 @@ begin
     end;
     PageControl.ActivePage := PreviousActivePage;
     PageControl.Enabled := True;
+    ProgressBar.Visible := False;
+    StatusBar.Panels[1].Style := psText;
   end;
 end;
 
@@ -3276,11 +3275,21 @@ end;
 // Sets a text to the specified status panel and schedules it for clearing
 // after timeout (0 - no clearing).
 procedure TMainForm.SetStatusText(Status: String; StatusPanel: Integer = 0; Timeout: Integer = 1500);
+var PanelWidth: Integer;
 begin
   if StatusPanel = 0 then
     LabelStatus.HTMLText := Status
-  else
+  else begin
     StatusBar.Panels[StatusPanel].Text := Status;
+    // Resize panel to fit text
+    if (Status <> '') then begin
+      // Add 6 for 2*(border + border gap left + border gap right)
+      PanelWidth := StatusBar.Canvas.TextWidth(Status) + 6;
+      PanelWidth := Max(90, Min(PanelWidth, 150));
+      StatusBar.Panels[0].Width := StatusBar.Width - PanelWidth;
+      StatusBar.Panels[1].Width := PanelWidth;
+    end;
+  end;
   if (StatusTimer.Tag = StatusPanel) then StatusTimer.Enabled := False;
   if (Status <> '') and (Timeout > 0) then begin
     StatusTimer.Enabled := False;
@@ -3306,7 +3315,7 @@ end;
 procedure TMainForm.StatusBarDrawPanel(StatusBar: TStatusBar;
   Panel: TStatusPanel; const Rect: TRect);
 begin
-  if (ProgressBar.Visible) and (Panel = StatusBar.Panels[1]) then begin
+  if ((Panel = StatusBar.Panels[1]) and (ProgressBar.Visible)) then begin
     ProgressBar.Top := Rect.Top - 1;
     ProgressBar.Left := Rect.Left - 1;
     ProgressBar.Width := Rect.Right - Rect.Left + 2;
