@@ -1,6 +1,10 @@
 CHANGELOG
 ---------
 
+2011-11-15  v1.0.7, build 50.
+- Made filename status panel width dynamic.
+- Fixed saving duplicate cards on site exports.
+
 2011-11-14  v1.0.6, build 49.
 - Fixed some bugs with batch exports.
 
