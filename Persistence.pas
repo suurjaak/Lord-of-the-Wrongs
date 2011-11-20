@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   21.12.2003
- * @modified  12.11.2011
+ * @modified  21.11.2011
  *)
 unit Persistence;
 
@@ -867,13 +867,14 @@ const
     'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteContentPictureMaxHeight", "225")',
     'INSERT OR IGNORE INTO settings (name, value) VALUES ("SiteContentPictureMaxWidth", "395")'
   );
-  RACE_DEFAULTS: array[1..4] of String = (
+  RACE_COUNT = 4;
+  RACE_DEFAULTS: array[1..RACE_COUNT] of String = (
     'INSERT OR IGNORE INTO races (id, name, is_good, character_name, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (1, "Fellowship", 1, "companion", 18, 370, 17, 304, :character_picture, :other_picture, :strength_picture, :health_picture)',
     'INSERT OR IGNORE INTO races (id, name, is_good, character_name, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (5, "Soft Drink", 0, "minion", 18, 372, 19, 304, :character_picture, :other_picture, :strength_picture, :health_picture)',
     'INSERT OR IGNORE INTO races (id, name, is_good, character_name, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (6, "Strong Drink", 0, "minion", 20, 371, 20, 304, :character_picture, :other_picture, :strength_picture, :health_picture)',
     'INSERT OR IGNORE INTO races (id, name, is_good, character_name, health_picture_left, health_picture_top, strength_picture_left, strength_picture_top, character_picture, other_picture, strength_picture, health_picture) ' + 'VALUES (7, "Medium Drink", 0, "minion", 22, 372, 19, 304, :character_picture, :other_picture, :strength_picture, :health_picture)'
   );
-  RACE_NAMES: array[1..4] of String = (
+  RACE_NAMES: array[1..RACE_COUNT] of String = (
     'Fellowship', 'Soft Drink', 'Strong Drink', 'Medium Drink'
   );
   RACE_PICTURES: array[1..4] of String = (

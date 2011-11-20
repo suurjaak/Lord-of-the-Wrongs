@@ -1,6 +1,10 @@
 CHANGELOG
 ---------
 
+2011-11-21  v1.0.8, build 51.
+- Fixed discovered memory leaks.
+- Deck lists are sorted by deck title.
+
 2011-11-15  v1.0.7, build 50.
 - Made filename status panel width dynamic.
 - Fixed saving duplicate cards on site exports.

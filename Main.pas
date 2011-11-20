@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   12.20.2003
- * @modified  14.11.2011
+ * @modified  21.11.2011
  *)
 unit Main;
 
@@ -528,32 +528,44 @@ begin
   CardResult := mrYes;
   DeckResult := mrYes;
   SiteResult := mrYes;
-  if (CheckCard and IsCardChanged) then begin
-    CardResult := MessageDlg(Format('Do you want to save the changes you made to the card "%s"?',
-                                    [EditTitle.Text]), mtWarning, [mbYes, mbNo, mbCancel], 0);
-    if (CardResult = mrYes) then begin
-      SetInterfaceDataToCard(CurrentCard);
-      SaveCurrentCard();
+  if (CheckCard) and (CurrentCard <> nil) then begin
+    if (IsCardChanged) then begin
+      CardResult := MessageDlg(Format('Do you want to save the changes you made to the card "%s"?',
+                                      [EditTitle.Text]), mtWarning, [mbYes, mbNo, mbCancel], 0);
+      if (CardResult = mrYes) then begin
+        SetInterfaceDataToCard(CurrentCard);
+        SaveCurrentCard();
+      end;
     end;
+    // Destroy new but unsaved item if user did not cancel
+    if (CardResult <> mrCancel) and (0 = CurrentCard.ID) then FreeAndNil(CurrentCard);
   end;
   if (CardResult <> mrCancel) then
-    if (CheckSite and IsSiteChanged) then begin
-      SiteResult := MessageDlg(Format('Do you want to save the changes you made to the site "%s"?',
-                                      [EditSiteTitle.Text]), mtWarning, [mbYes, mbNo, mbCancel], 0);
-      if (SiteResult = mrYes) then begin
-        SetInterfaceDataToSite(CurrentSite);
-        SaveCurrentSite();
+    if (CheckSite) and (CurrentSite <> nil) then begin
+      if (IsSiteChanged) then begin
+        SiteResult := MessageDlg(Format('Do you want to save the changes you made to the site "%s"?',
+                                        [EditSiteTitle.Text]), mtWarning, [mbYes, mbNo, mbCancel], 0);
+        if (SiteResult = mrYes) then begin
+          SetInterfaceDataToSite(CurrentSite);
+          SaveCurrentSite();
+        end;
       end;
+      // Destroy new but unsaved item if user did not cancel
+      if (SiteResult <> mrCancel) and (0 = CurrentSite.ID) then FreeAndNil(CurrentSite);
     end;
   if (CardResult <> mrCancel) and (SiteResult <> mrCancel) then
-    if (CheckDeck and IsDeckChanged) then begin
-      DeckResult := MessageDlg(Format('Do you want to save the changes you made to the deck "%s"?',
-                                      [EditDeckTitle.Text]), mtWarning, [mbYes, mbNo, mbCancel], 0);
-      if (DeckResult = mrYes) then begin
-        SaveCurrentDeck()
-      end else if (DeckResult = mrNo) then begin
-        UndoCurrentDeckChanges();
+    if (CheckDeck) and (CurrentDeck <> nil) then begin
+      if (IsDeckChanged) then begin
+        DeckResult := MessageDlg(Format('Do you want to save the changes you made to the deck "%s"?',
+                                        [EditDeckTitle.Text]), mtWarning, [mbYes, mbNo, mbCancel], 0);
+        if (DeckResult = mrYes) then begin
+          SaveCurrentDeck()
+        end else if (DeckResult = mrNo) then begin
+          UndoCurrentDeckChanges();
+        end;
       end;
+      // Destroy new but unsaved item if user did not cancel
+      if (DeckResult <> mrCancel) and (0 = CurrentDeck.ID) then FreeAndNil(CurrentDeck);
     end;
   if ((CardResult = mrCancel) or (DeckResult = mrCancel) or (SiteResult = mrCancel)) then
     Result := mrCancel
@@ -616,14 +628,14 @@ end;
 procedure TMainForm.ButtonNewCardClick(Sender: TObject);
 var Choice: Integer;
 begin
-  NewCardDialog.Show();
-  if NewCardComboRace.ItemIndex < 0 then NewCardComboRace.ItemIndex := 0;
-  if NewCardComboCardType.ItemIndex < 0 then NewCardComboCardType.ItemIndex := 0;
-  NewCardComboRace.SetFocus(); // Reset focussing to first
-  NewCardDialog.Hide();
-  Choice := NewCardDialog.ShowModal();
-  if (Choice = mrOk) then begin
-    if (GetCheckSavingResult(True, False, False) <> mrCancel) then begin
+  if (GetCheckSavingResult(True, False, False) <> mrCancel) then begin
+    NewCardDialog.Show();
+    if NewCardComboRace.ItemIndex < 0 then NewCardComboRace.ItemIndex := 0;
+    if NewCardComboCardType.ItemIndex < 0 then NewCardComboCardType.ItemIndex := 0;
+    NewCardComboRace.SetFocus(); // Reset focussing to first
+    NewCardDialog.Hide();
+    Choice := NewCardDialog.ShowModal();
+    if (Choice = mrOk) then begin
       CurrentCard := TCard.Create();
       CurrentCard.CardType := GetCardTypeByName(NewCardComboCardType.Items[NewCardComboCardType.ItemIndex]);
       CurrentCard.Race := GetRaceByName(NewCardComboRace.Items[NewCardComboRace.ItemIndex]);
@@ -956,8 +968,15 @@ end;
 // Updates all the variables and controls to reflect a deck change
 procedure TMainForm.DecksUpdate();
 var I, Index: Integer;
-    Deck: TDeck;
+    Deck, PreviousFilterDeck: TDeck;
 begin
+  PreviousFilterDeck := nil;
+  // Remember previously selected deck in ComboListDecks
+  if (ComboListDecks.ItemIndex > 0) then begin
+    PreviousFilterDeck := ComboListDecksMap.GetValue(IntToStr(ComboListDecks.ItemIndex - 1)) as TDeck;
+  end;
+  // ComboListDecks has an empty value at first, so ItemIndex - 1
+  Decks.Sort(DeckListSortCompare);
   ComboListDecks.Items.Clear();
   ComboDeckList.Items.Clear();
   ComboListDecksMap.Clear();
@@ -970,6 +989,8 @@ begin
     ComboListDecksMap.PutValue(IntToStr(I), Deck);
     if (Deck = CurrentDeck) then
       Index := I;
+    if (Deck = PreviousFilterDeck) then
+      ComboListDecks.ItemIndex := I + 1; // + 1, as first item is blank
   end;
   if (CurrentDeck = nil) then begin
     ListDeckCards.Items.Clear();
@@ -1392,15 +1413,15 @@ end;
 procedure TMainForm.ButtonNewDeckClick(Sender: TObject);
 var Temp: String;
 begin
-  Temp := Trim(InputBox('Create new deck', 'Enter the title of the new deck:', ''));
-  if (Length(Temp) > 0) then begin
-    if (GetCheckSavingResult(False, False, True) <> mrCancel) then begin
+  if (GetCheckSavingResult(False, False, True) <> mrCancel) then begin
+    Temp := Trim(InputBox('Create new deck', 'Enter the title of the new deck:', ''));
+    if (Length(Temp) > 0) then begin
       CurrentDeck := TDeck.Create();
       CurrentDeck.Title := Temp;
       LoadDeck(CurrentDeck);
       ButtonSaveDeck.Enabled := True;
       ButtonDeleteDeck.Enabled := False;
-      Decks.Add(CurrentDeck);
+      ComboDeckList.ItemIndex := -1;
     end;
   end;
 end;
@@ -1484,14 +1505,18 @@ end;
 
 // Saves the current deck, if any
 procedure TMainForm.SaveCurrentDeck();
+var IsNewDeck: Boolean;
 begin
   CurrentDeck.Title := EditDeckTitle.Text;
   CurrentDeck.Comment := EditDeckComment.Text;
   if (not IsDeckTitleUnique(CurrentDeck)) then begin
     MessageDlg('You cannot save the deck under this title, as a deck must have a unique title.', mtWarning, [mbOK], 0);
   end else begin
+    IsNewDeck := (CurrentDeck.ID = 0);
     Database.Store(CurrentDeck);
     CurrentDeck.ShowName := '';
+    if (IsNewDeck) then
+      Decks.Add(CurrentDeck);
     DecksUpdate();
     ButtonDeleteDeck.Enabled := True;
     SetDeckChanged(False);
@@ -1749,6 +1774,7 @@ begin
       CurrentCard.IsContentPictureChanged := False;
       CurrentCard.OriginalCardType := nil;
       CurrentCard.OriginalRace := nil;
+      if (CurrentCard.ID = 0) then CurrentCard.Free();
       CurrentCard := NewCard;
       FreeAndNil(CurrentCard.Thumbnail); // Clear thumbnail to regenerate
       PreviewCard(CurrentCard);
@@ -1852,25 +1878,30 @@ var I: Integer;
 begin
   EditDeckTitle.Text := CurrentDeck.Title;
   EditDeckComment.Text := CurrentDeck.Comment;
-  for I := 0 to CurrentDeck.Cards.Count - 1 do begin
+  I := 0;
+  while (I < CurrentDeck.Cards.Count) do begin
     DeckCard := CurrentDeck.Cards.Items[I];
+    // @todo here and on decksite do freeandnil
     if (DeckCard.ID = 0) then begin
-      CurrentDeck.Cards.Items[I] := nil; // Unsaved card, undo -> abandon card
+      CurrentDeck.Cards.Remove(DeckCard);
+      FreeAndNil(DeckCard); // Unsaved card, undo -> abandon card
     end else begin
       DeckCard.IsDeleted := False; // Reset possible deletion
+      Inc(I);
     end;
   end;
-  CurrentDeck.Cards.Pack();
   UpdateDeckCardsList();
-  for I := 0 to CurrentDeck.Sites.Count - 1 do begin
+  I := 0;
+  while (I < CurrentDeck.Sites.Count) do begin
     DeckSite := CurrentDeck.Sites.Items[I];
     if (DeckSite.ID = 0) then begin
-      CurrentDeck.Sites.Items[I] := nil;
+      CurrentDeck.Sites.Remove(DeckSite);
+      FreeAndNil(DeckSite); // Unsaved site, undo -> abandon site
     end else begin
       DeckSite.IsDeleted := False;
+      Inc(I);
     end;
   end;
-  CurrentDeck.Sites.Pack();
   PopulateListDeckSites();
   ButtonSaveDeck.Enabled := False;
   ButtonUndoDeckChanges.Enabled := False;
@@ -1914,6 +1945,7 @@ begin
           NewDeck.Sites.Add(TempSite);
         end;
       UndoCurrentDeckChanges();
+      if (CurrentDeck.ID = 0) then CurrentDeck.Free();
       CurrentDeck := NewDeck;
       Decks.Add(CurrentDeck);
       Database.Store(CurrentDeck);
@@ -2452,6 +2484,7 @@ begin
         CurrentSite.OriginalContentPicture := nil;
         CurrentSite.IsContentPictureChanged := False;
       end;
+      if (CurrentSite.ID = 0) then CurrentSite.Free();
 
       CurrentSite := NewSite;
       SaveCurrentSite();

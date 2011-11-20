@@ -3,7 +3,7 @@
  *
  * @author    Erki Suurjaak
  * @created   20.12.2003
- * @modified  12.11.2011
+ * @modified  21.11.2011
  *)
 unit Globals;
 
@@ -83,6 +83,8 @@ function ExtractFileNameBetter(FilePath: String): String;
 function CardListSortCompare(Item1, Item2: Pointer): Integer;
 // The comparison function used for sorting Sites
 function SiteListSortCompare(Item1, Item2: Pointer): Integer;
+// The comparison function used for sorting Decks
+function DeckListSortCompare(Item1, Item2: Pointer): Integer;
 // Returns a system setting, from the Settings map
 function GetSetting(Name: String): String;
 // Returns a system setting, from the Settings map
@@ -329,6 +331,20 @@ begin
   Field2 := Site2.Title;
   Result := StrIComp(PChar(Field1), PChar(Field2));
 end;
+
+
+// The comparison function used for sorting Decks
+function DeckListSortCompare(Item1, Item2: Pointer): Integer;
+var Deck1, Deck2: TDeck;
+    Field1, Field2: String;
+begin
+  Deck1 := Item1;
+  Deck2 := Item2;
+  Field1 := Deck1.Title;
+  Field2 := Deck2.Title;
+  Result := StrIComp(PChar(Field1), PChar(Field2));
+end;
+
 
 // Returns a system setting, from the Settings map
 function GetSetting(Name: String): String;
